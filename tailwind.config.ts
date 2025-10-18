@@ -58,6 +58,13 @@ export default {
           ring: "hsl(var(--sidebar-ring))",
         },
       },
+      backgroundImage: {
+        'manga-gradient': 'var(--manga-gradient)',
+      },
+      boxShadow: {
+        'manga-glow': 'var(--manga-glow)',
+        'manga-card-hover': 'var(--manga-card-hover)',
+      },
       borderRadius: {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
