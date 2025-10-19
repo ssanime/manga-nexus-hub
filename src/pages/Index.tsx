@@ -2,10 +2,34 @@ import { Navbar } from "@/components/Navbar";
 import { HeroSection } from "@/components/HeroSection";
 import { MangaCard } from "@/components/MangaCard";
 import { Button } from "@/components/ui/button";
-import { ArrowRight, Flame, Clock, Star } from "lucide-react";
+import { Settings, ArrowRight, Flame, Clock, Star } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
 const Index = () => {
+  const navigate = useNavigate();
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  useEffect(() => {
+    checkAdminRole();
+  }, []);
+
+  const checkAdminRole = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      const { data: roles } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', user.id);
+      
+      if (roles && roles.some(r => r.role === 'admin')) {
+        setIsAdmin(true);
+      }
+    }
+  };
+
   // Temporary mock data - will be replaced with real data from database
   const featuredManga = [
     {
@@ -70,6 +94,19 @@ const Index = () => {
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
+      
+      {isAdmin && (
+        <div className="fixed bottom-8 left-8 z-50">
+          <Button 
+            onClick={() => navigate('/admin')}
+            size="lg"
+            className="shadow-lg"
+          >
+            <Settings className="w-5 h-5 mr-2" />
+            لوحة التحكم
+          </Button>
+        </div>
+      )}
       
       <HeroSection />
 

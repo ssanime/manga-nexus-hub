@@ -13,11 +13,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { User, Settings, BookMarked, Upload, LogOut } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
-const COMMON_GENRES = [
-  "أكشن", "مغامرة", "كوميدي", "دراما", "فانتازيا", "رعب", 
-  "رومانسي", "خيال علمي", "إثارة", "رياضة", "شريحة من الحياة",
-  "خارق للطبيعة", "غموض", "نفسي", "مدرسي"
-];
 
 const Profile = () => {
   const { toast } = useToast();
@@ -31,7 +26,6 @@ const Profile = () => {
   const [formData, setFormData] = useState({
     username: "",
     bio: "",
-    favorite_genres: [] as string[],
   });
 
   useEffect(() => {
@@ -55,16 +49,33 @@ const Profile = () => {
       .from("profiles")
       .select("*")
       .eq("id", userId)
-      .single();
+      .maybeSingle();
 
     if (data) {
       setProfile(data);
       setFormData({
         username: data.username || "",
         bio: data.bio || "",
-        favorite_genres: data.favorite_genres || [],
       });
       setAvatarPreview(data.avatar_url || "");
+    } else if (!error || error.code === 'PGRST116') {
+      // Profile doesn't exist, create it
+      const { data: newProfile, error: createError } = await supabase
+        .from("profiles")
+        .insert({
+          id: userId,
+          username: user?.email?.split('@')[0] || '',
+        })
+        .select()
+        .single();
+
+      if (newProfile && !createError) {
+        setProfile(newProfile);
+        setFormData({
+          username: newProfile.username || "",
+          bio: newProfile.bio || "",
+        });
+      }
     }
   };
 
@@ -108,11 +119,11 @@ const Profile = () => {
       // Update profile
       const { error } = await supabase
         .from('profiles')
-        .update({
+        .upsert({
+          id: user.id,
           username: formData.username,
           bio: formData.bio,
           avatar_url: avatarUrl,
-          favorite_genres: formData.favorite_genres,
         })
         .eq('id', user.id);
 
@@ -140,14 +151,6 @@ const Profile = () => {
     navigate("/");
   };
 
-  const toggleGenre = (genre: string) => {
-    setFormData(prev => ({
-      ...prev,
-      favorite_genres: prev.favorite_genres.includes(genre)
-        ? prev.favorite_genres.filter(g => g !== genre)
-        : [...prev.favorite_genres, genre]
-    }));
-  };
 
   if (!user) return null;
 
@@ -223,20 +226,20 @@ const Profile = () => {
                     />
                   </div>
 
-                  {/* Favorite Genres */}
+                  {/* Account Info */}
                   <div className="space-y-2">
-                    <Label>التصنيفات المفضلة</Label>
-                    <div className="flex flex-wrap gap-2">
-                      {COMMON_GENRES.map(genre => (
-                        <Badge
-                          key={genre}
-                          variant={formData.favorite_genres.includes(genre) ? "default" : "outline"}
-                          className="cursor-pointer"
-                          onClick={() => toggleGenre(genre)}
-                        >
-                          {genre}
-                        </Badge>
-                      ))}
+                    <Label>معلومات الحساب</Label>
+                    <div className="p-4 bg-muted rounded-lg space-y-2">
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">البريد الإلكتروني:</span>
+                        <span className="font-medium">{user.email}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">تاريخ التسجيل:</span>
+                        <span className="font-medium">
+                          {profile?.created_at ? new Date(profile.created_at).toLocaleDateString('ar-SA') : '-'}
+                        </span>
+                      </div>
                     </div>
                   </div>
 

@@ -217,25 +217,144 @@ const Admin = () => {
           </Card>
 
           {/* Tabs */}
-          <Tabs defaultValue="add-manga" className="w-full">
-            <TabsList className="grid w-full max-w-4xl grid-cols-4">
+          <Tabs defaultValue="manga" className="w-full">
+            <TabsList className="grid w-full max-w-6xl grid-cols-6">
+              <TabsTrigger value="manga">مانجا</TabsTrigger>
+              <TabsTrigger value="manhwa">مانهوا</TabsTrigger>
+              <TabsTrigger value="manhua">مانها</TabsTrigger>
               <TabsTrigger value="add-manga">
                 <Plus className="w-4 h-4 mr-2" />
-                إضافة مانجا
+                إضافة
               </TabsTrigger>
               <TabsTrigger value="add-chapter">
                 <BookPlus className="w-4 h-4 mr-2" />
-                إضافة فصل
+                فصل
               </TabsTrigger>
               <TabsTrigger value="jobs">
                 <Database className="w-4 h-4 mr-2" />
-                مهام السحب
-              </TabsTrigger>
-              <TabsTrigger value="manga">
-                <RefreshCw className="w-4 h-4 mr-2" />
-                المانجا المسحوبة
+                المهام
               </TabsTrigger>
             </TabsList>
+            
+            {/* Manga Tab */}
+            <TabsContent value="manga" className="mt-6">
+              <div className="space-y-4">
+                <div>
+                  <h2 className="text-2xl font-bold text-foreground mb-2">قائمة المانجا</h2>
+                  <p className="text-muted-foreground">جميع المانجا المتوفرة</p>
+                </div>
+                {mangaList.filter(m => !m.source_url.toLowerCase().includes('manhwa') && !m.source_url.toLowerCase().includes('manhua')).length === 0 ? (
+                  <Card className="p-8 text-center bg-card border-border">
+                    <p className="text-muted-foreground">لا توجد مانجا بعد</p>
+                  </Card>
+                ) : (
+                  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                    {mangaList.filter(m => !m.source_url.toLowerCase().includes('manhwa') && !m.source_url.toLowerCase().includes('manhua')).map((manga) => (
+                      <Card key={manga.id} className="overflow-hidden bg-card border-border hover:border-primary transition-colors">
+                        <div className="flex gap-4 p-4">
+                          {manga.cover_url && (
+                            <img src={manga.cover_url} alt={manga.title} className="w-20 h-28 object-cover rounded" />
+                          )}
+                          <div className="flex-1 space-y-2">
+                            <h3 className="font-semibold text-foreground line-clamp-2">{manga.title}</h3>
+                            <div className="flex flex-wrap gap-2">
+                              {manga.status && (
+                                <Badge variant="secondary" className="text-xs">
+                                  {manga.status === "completed" ? "مكتملة" : "مستمرة"}
+                                </Badge>
+                              )}
+                              {manga.rating > 0 && (
+                                <Badge variant="outline" className="text-xs">⭐ {manga.rating}</Badge>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </Card>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </TabsContent>
+
+            {/* Manhwa Tab */}
+            <TabsContent value="manhwa" className="mt-6">
+              <div className="space-y-4">
+                <div>
+                  <h2 className="text-2xl font-bold text-foreground mb-2">قائمة المانهوا</h2>
+                  <p className="text-muted-foreground">جميع المانهوا الكورية</p>
+                </div>
+                {mangaList.filter(m => m.source_url.toLowerCase().includes('manhwa')).length === 0 ? (
+                  <Card className="p-8 text-center bg-card border-border">
+                    <p className="text-muted-foreground">لا توجد مانهوا بعد</p>
+                  </Card>
+                ) : (
+                  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                    {mangaList.filter(m => m.source_url.toLowerCase().includes('manhwa')).map((manga) => (
+                      <Card key={manga.id} className="overflow-hidden bg-card border-border hover:border-primary transition-colors">
+                        <div className="flex gap-4 p-4">
+                          {manga.cover_url && (
+                            <img src={manga.cover_url} alt={manga.title} className="w-20 h-28 object-cover rounded" />
+                          )}
+                          <div className="flex-1 space-y-2">
+                            <h3 className="font-semibold text-foreground line-clamp-2">{manga.title}</h3>
+                            <div className="flex flex-wrap gap-2">
+                              {manga.status && (
+                                <Badge variant="secondary" className="text-xs">
+                                  {manga.status === "completed" ? "مكتملة" : "مستمرة"}
+                                </Badge>
+                              )}
+                              {manga.rating > 0 && (
+                                <Badge variant="outline" className="text-xs">⭐ {manga.rating}</Badge>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </Card>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </TabsContent>
+
+            {/* Manhua Tab */}
+            <TabsContent value="manhua" className="mt-6">
+              <div className="space-y-4">
+                <div>
+                  <h2 className="text-2xl font-bold text-foreground mb-2">قائمة المانها</h2>
+                  <p className="text-muted-foreground">جميع المانها الصينية</p>
+                </div>
+                {mangaList.filter(m => m.source_url.toLowerCase().includes('manhua')).length === 0 ? (
+                  <Card className="p-8 text-center bg-card border-border">
+                    <p className="text-muted-foreground">لا توجد مانها بعد</p>
+                  </Card>
+                ) : (
+                  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                    {mangaList.filter(m => m.source_url.toLowerCase().includes('manhua')).map((manga) => (
+                      <Card key={manga.id} className="overflow-hidden bg-card border-border hover:border-primary transition-colors">
+                        <div className="flex gap-4 p-4">
+                          {manga.cover_url && (
+                            <img src={manga.cover_url} alt={manga.title} className="w-20 h-28 object-cover rounded" />
+                          )}
+                          <div className="flex-1 space-y-2">
+                            <h3 className="font-semibold text-foreground line-clamp-2">{manga.title}</h3>
+                            <div className="flex flex-wrap gap-2">
+                              {manga.status && (
+                                <Badge variant="secondary" className="text-xs">
+                                  {manga.status === "completed" ? "مكتملة" : "مستمرة"}
+                                </Badge>
+                              )}
+                              {manga.rating > 0 && (
+                                <Badge variant="outline" className="text-xs">⭐ {manga.rating}</Badge>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </Card>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </TabsContent>
 
             <TabsContent value="add-manga" className="mt-6">
               <div className="space-y-4">
@@ -313,51 +432,6 @@ const Admin = () => {
               )}
             </TabsContent>
 
-            <TabsContent value="manga" className="space-y-4 mt-6">
-              {mangaList.length === 0 ? (
-                <Card className="p-8 text-center bg-card border-border">
-                  <p className="text-muted-foreground">لا توجد مانجا مسحوبة بعد</p>
-                </Card>
-              ) : (
-                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                  {mangaList.map((manga) => (
-                    <Card key={manga.id} className="overflow-hidden bg-card border-border hover:border-primary transition-colors">
-                      <div className="flex gap-4 p-4">
-                        {manga.cover_url && (
-                          <img
-                            src={manga.cover_url}
-                            alt={manga.title}
-                            className="w-20 h-28 object-cover rounded"
-                          />
-                        )}
-                        <div className="flex-1 space-y-2">
-                          <h3 className="font-semibold text-foreground line-clamp-2">
-                            {manga.title}
-                          </h3>
-                          <div className="flex flex-wrap gap-2">
-                            {manga.status && (
-                              <Badge variant="secondary" className="text-xs">
-                                {manga.status === "completed" ? "مكتملة" : "مستمرة"}
-                              </Badge>
-                            )}
-                            {manga.rating > 0 && (
-                              <Badge variant="outline" className="text-xs">
-                                ⭐ {manga.rating}
-                              </Badge>
-                            )}
-                          </div>
-                          {manga.last_scraped_at && (
-                            <p className="text-xs text-muted-foreground">
-                              آخر سحب: {new Date(manga.last_scraped_at).toLocaleDateString("ar-SA")}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    </Card>
-                  ))}
-                </div>
-              )}
-            </TabsContent>
           </Tabs>
         </div>
       </div>
