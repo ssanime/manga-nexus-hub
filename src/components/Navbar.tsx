@@ -1,17 +1,33 @@
 import { Link } from "react-router-dom";
-import { Search, BookOpen, User, Menu } from "lucide-react";
+import { Search, BookOpen, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { useNavigate } from "react-router-dom";
 
 export const Navbar = () => {
+  const navigate = useNavigate();
   const [searchOpen, setSearchOpen] = useState(false);
+  const [user, setUser] = useState<any>(null);
+
+  useEffect(() => {
+    checkUser();
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      setUser(session?.user ?? null);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const checkUser = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    setUser(session?.user ?? null);
+  };
 
   return (
     <nav className="sticky top-0 z-50 border-b border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
       <div className="container mx-auto px-4">
         <div className="flex h-16 items-center justify-between">
-          {/* Logo */}
           <Link to="/" className="flex items-center gap-2 group">
             <div className="relative">
               <BookOpen className="h-8 w-8 text-primary transition-transform group-hover:scale-110" />
@@ -22,7 +38,6 @@ export const Navbar = () => {
             </span>
           </Link>
 
-          {/* Search Bar - Desktop */}
           <div className="hidden md:flex flex-1 max-w-md mx-8">
             <div className="relative w-full">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -34,18 +49,18 @@ export const Navbar = () => {
             </div>
           </div>
 
-          {/* Navigation Links */}
           <div className="flex items-center gap-4">
-            <Link to="/browse">
-              <Button variant="ghost" className="hidden md:flex">
-                تصفح
-              </Button>
-            </Link>
-            <Link to="/auth">
-              <Button variant="ghost" size="icon">
+            {user ? (
+              <Button variant="ghost" size="icon" onClick={() => navigate("/profile")}>
                 <User className="h-5 w-5" />
               </Button>
-            </Link>
+            ) : (
+              <Link to="/auth">
+                <Button variant="ghost" size="icon">
+                  <User className="h-5 w-5" />
+                </Button>
+              </Link>
+            )}
             <Button
               variant="ghost"
               size="icon"
@@ -57,7 +72,6 @@ export const Navbar = () => {
           </div>
         </div>
 
-        {/* Mobile Search */}
         {searchOpen && (
           <div className="pb-4 md:hidden animate-fade-in">
             <Input

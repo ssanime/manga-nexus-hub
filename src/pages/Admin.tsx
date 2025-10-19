@@ -6,20 +6,32 @@ import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Database, Download, RefreshCw, CheckCircle, XCircle, Clock } from "lucide-react";
+import { Database, Download, RefreshCw, CheckCircle, XCircle, Clock, Plus, BookPlus } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { AddMangaForm } from "@/components/admin/AddMangaForm";
+import { AddChapterForm } from "@/components/admin/AddChapterForm";
+import { useNavigate } from "react-router-dom";
 
 const Admin = () => {
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [mangaUrl, setMangaUrl] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [jobs, setJobs] = useState<any[]>([]);
   const [mangaList, setMangaList] = useState<any[]>([]);
 
   useEffect(() => {
+    checkAuth();
     fetchJobs();
     fetchManga();
   }, []);
+
+  const checkAuth = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      navigate("/auth");
+    }
+  };
 
   const fetchJobs = async () => {
     const { data, error } = await supabase
@@ -205,8 +217,16 @@ const Admin = () => {
           </Card>
 
           {/* Tabs */}
-          <Tabs defaultValue="jobs" className="w-full">
-            <TabsList className="grid w-full max-w-md grid-cols-2">
+          <Tabs defaultValue="add-manga" className="w-full">
+            <TabsList className="grid w-full max-w-4xl grid-cols-4">
+              <TabsTrigger value="add-manga">
+                <Plus className="w-4 h-4 mr-2" />
+                إضافة مانجا
+              </TabsTrigger>
+              <TabsTrigger value="add-chapter">
+                <BookPlus className="w-4 h-4 mr-2" />
+                إضافة فصل
+              </TabsTrigger>
               <TabsTrigger value="jobs">
                 <Database className="w-4 h-4 mr-2" />
                 مهام السحب
@@ -216,6 +236,34 @@ const Admin = () => {
                 المانجا المسحوبة
               </TabsTrigger>
             </TabsList>
+
+            <TabsContent value="add-manga" className="mt-6">
+              <div className="space-y-4">
+                <div>
+                  <h2 className="text-2xl font-bold text-foreground mb-2">
+                    إضافة مانجا جديدة
+                  </h2>
+                  <p className="text-muted-foreground">
+                    أضف مانجا جديدة يدوياً مع كل التفاصيل
+                  </p>
+                </div>
+                <AddMangaForm onSuccess={() => { fetchManga(); }} />
+              </div>
+            </TabsContent>
+
+            <TabsContent value="add-chapter" className="mt-6">
+              <div className="space-y-4">
+                <div>
+                  <h2 className="text-2xl font-bold text-foreground mb-2">
+                    إضافة فصل جديد
+                  </h2>
+                  <p className="text-muted-foreground">
+                    أضف فصل جديد لإحدى المانجا الموجودة
+                  </p>
+                </div>
+                <AddChapterForm onSuccess={() => { fetchManga(); }} />
+              </div>
+            </TabsContent>
 
             <TabsContent value="jobs" className="space-y-4 mt-6">
               {jobs.length === 0 ? (
