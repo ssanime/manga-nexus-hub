@@ -9,6 +9,9 @@ import Reader from "./pages/Reader";
 import Auth from "./pages/Auth";
 import Admin from "./pages/Admin";
 import Profile from "./pages/Profile";
+import Manga from "./pages/Manga";
+import Manhwa from "./pages/Manhwa";
+import Manhua from "./pages/Manhua";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -21,6 +24,9 @@ const App = () => (
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<Index />} />
+          <Route path="/manga" element={<Manga />} />
+          <Route path="/manhwa" element={<Manhwa />} />
+          <Route path="/manhua" element={<Manhua />} />
           <Route path="/manga/:id" element={<MangaDetail />} />
           <Route path="/read/:mangaId/:chapterId" element={<Reader />} />
           <Route path="/auth" element={<Auth />} />

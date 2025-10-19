@@ -38,12 +38,27 @@ export const Navbar = () => {
             </span>
           </Link>
 
-          <div className="hidden md:flex flex-1 max-w-md mx-8">
+          <div className="hidden md:flex items-center gap-6 flex-1 justify-center">
+            <Link to="/" className="text-sm font-medium hover:text-primary transition-colors">
+              الرئيسية
+            </Link>
+            <Link to="/manga" className="text-sm font-medium hover:text-primary transition-colors">
+              مانجا
+            </Link>
+            <Link to="/manhwa" className="text-sm font-medium hover:text-primary transition-colors">
+              مانهوا
+            </Link>
+            <Link to="/manhua" className="text-sm font-medium hover:text-primary transition-colors">
+              مانها
+            </Link>
+          </div>
+
+          <div className="hidden md:flex max-w-xs">
             <div className="relative w-full">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 type="search"
-                placeholder="ابحث عن مانجا..."
+                placeholder="ابحث..."
                 className="pl-10 bg-secondary/50 border-border focus:border-primary transition-all"
               />
             </div>

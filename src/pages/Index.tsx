@@ -30,66 +30,27 @@ const Index = () => {
     }
   };
 
-  // Temporary mock data - will be replaced with real data from database
-  const featuredManga = [
-    {
-      id: "1",
-      title: "هجوم العمالقة",
-      coverUrl: "https://images.unsplash.com/photo-1618519764620-7403abdbdfe9?w=400&h=600&fit=crop",
-      rating: 9.2,
-      latestChapter: "الفصل 139",
-      genres: ["أكشن", "دراما", "فانتازيا"],
-      isNew: false,
-    },
-    {
-      id: "2",
-      title: "ون بيس",
-      coverUrl: "https://images.unsplash.com/photo-1612178537253-bccd437b730e?w=400&h=600&fit=crop",
-      rating: 9.5,
-      latestChapter: "الفصل 1100",
-      genres: ["مغامرات", "أكشن", "كوميديا"],
-      isNew: true,
-    },
-    {
-      id: "3",
-      title: "ناروتو",
-      coverUrl: "https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=400&h=600&fit=crop",
-      rating: 8.9,
-      latestChapter: "الفصل 700",
-      genres: ["أكشن", "مغامرات", "فنون قتالية"],
-      isNew: false,
-    },
-    {
-      id: "4",
-      title: "قاتل الشياطين",
-      coverUrl: "https://images.unsplash.com/photo-1578632767115-351597cf2477?w=400&h=600&fit=crop",
-      rating: 9.0,
-      latestChapter: "الفصل 205",
-      genres: ["أكشن", "خيال", "خارق للطبيعة"],
-      isNew: false,
-    },
-    {
-      id: "5",
-      title: "طوكيو غول",
-      coverUrl: "https://images.unsplash.com/photo-1601645191163-3fc0d5d64e35?w=400&h=600&fit=crop",
-      rating: 8.7,
-      latestChapter: "الفصل 179",
-      genres: ["رعب", "أكشن", "دراما"],
-      isNew: false,
-    },
-    {
-      id: "6",
-      title: "مذكرة الموت",
-      coverUrl: "https://images.unsplash.com/photo-1618519764620-7403abdbdfe9?w=400&h=600&fit=crop",
-      rating: 9.1,
-      latestChapter: "الفصل 108",
-      genres: ["إثارة", "غموض", "خارق للطبيعة"],
-      isNew: false,
-    },
-  ];
+  const [mangaList, setMangaList] = useState<any[]>([]);
 
-  const recentlyUpdated = featuredManga.slice(0, 4);
-  const trending = featuredManga.slice(2, 6);
+  useEffect(() => {
+    fetchManga();
+  }, [checkAdminRole]);
+
+  const fetchManga = async () => {
+    const { data, error } = await supabase
+      .from('manga')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(18);
+    
+    if (!error && data) {
+      setMangaList(data);
+    }
+  };
+
+  const featuredManga = mangaList.slice(0, 6);
+  const recentlyUpdated = mangaList.slice(0, 4);
+  const trending = mangaList.slice(0, 4);
 
   return (
     <div className="min-h-screen bg-background">
@@ -127,7 +88,16 @@ const Index = () => {
         
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4 md:gap-6">
           {featuredManga.map((manga) => (
-            <MangaCard key={manga.id} {...manga} />
+            <MangaCard 
+              key={manga.id}
+              id={manga.id}
+              title={manga.title}
+              coverUrl={manga.cover_url || ''}
+              rating={manga.rating || 0}
+              latestChapter="جديد"
+              genres={manga.genres || []}
+              isNew={true}
+            />
           ))}
         </div>
       </section>
@@ -149,7 +119,16 @@ const Index = () => {
         
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6">
           {recentlyUpdated.map((manga) => (
-            <MangaCard key={manga.id} {...manga} />
+            <MangaCard 
+              key={manga.id}
+              id={manga.id}
+              title={manga.title}
+              coverUrl={manga.cover_url || ''}
+              rating={manga.rating || 0}
+              latestChapter="محدث"
+              genres={manga.genres || []}
+              isNew={false}
+            />
           ))}
         </div>
       </section>
@@ -171,7 +150,16 @@ const Index = () => {
         
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6">
           {trending.map((manga) => (
-            <MangaCard key={manga.id} {...manga} />
+            <MangaCard 
+              key={manga.id}
+              id={manga.id}
+              title={manga.title}
+              coverUrl={manga.cover_url || ''}
+              rating={manga.rating || 0}
+              latestChapter="شائع"
+              genres={manga.genres || []}
+              isNew={false}
+            />
           ))}
         </div>
       </section>
