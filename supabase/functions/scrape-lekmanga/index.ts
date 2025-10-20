@@ -14,6 +14,39 @@ interface ScrapeMangaRequest {
   source?: string;
 }
 
+// Random User-Agents to bypass detection
+const USER_AGENTS = [
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:122.0) Gecko/20100101 Firefox/122.0',
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Safari/605.1.15',
+];
+
+function getRandomUserAgent(): string {
+  return USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
+}
+
+function getBaseHeaders(): HeadersInit {
+  return {
+    'User-Agent': getRandomUserAgent(),
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+    'Accept-Language': 'ar,en-US;q=0.9,en;q=0.8',
+    'Accept-Encoding': 'gzip, deflate, br',
+    'Connection': 'keep-alive',
+    'Upgrade-Insecure-Requests': '1',
+    'Sec-Fetch-Dest': 'document',
+    'Sec-Fetch-Mode': 'navigate',
+    'Sec-Fetch-Site': 'none',
+    'Sec-Fetch-User': '?1',
+    'Cache-Control': 'max-age=0',
+    'DNT': '1',
+    'sec-ch-ua': '"Chromium";v="121", "Not A(Brand";v="99"',
+    'sec-ch-ua-mobile': '?0',
+    'sec-ch-ua-platform': '"Windows"',
+  };
+}
+
 // Configuration for different sources
 const SCRAPER_CONFIGS: Record<string, {
   baseUrl: string;
@@ -31,7 +64,6 @@ const SCRAPER_CONFIGS: Record<string, {
     chapterDate: string;
     pageImages: string;
   };
-  headers: HeadersInit;
 }> = {
   "lekmanga": {
     baseUrl: "https://lekmanga.net",
@@ -48,22 +80,57 @@ const SCRAPER_CONFIGS: Record<string, {
       chapterUrl: "a",
       chapterDate: ".chapter-release-date",
       pageImages: ".reading-content img, img.wp-manga-chapter-img, .page-break img"
-    },
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-      'Accept-Language': 'en-US,en;q=0.9,ar;q=0.8',
-      'Accept-Encoding': 'gzip, deflate, br',
-      'Connection': 'keep-alive',
-      'Upgrade-Insecure-Requests': '1',
-      'Sec-Fetch-Dest': 'document',
-      'Sec-Fetch-Mode': 'navigate',
-      'Sec-Fetch-Site': 'none',
-      'Sec-Fetch-User': '?1',
-      'Cache-Control': 'max-age=0',
-      'sec-ch-ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
-      'sec-ch-ua-mobile': '?0',
-      'sec-ch-ua-platform': '"Windows"',
+    }
+  },
+  "azoramoon": {
+    baseUrl: "https://azoramoon.com",
+    selectors: {
+      title: "h1.entry-title, .post-title",
+      cover: ".summary_image img, img.wp-post-image",
+      description: ".summary__content, .description",
+      status: ".post-status, .summary-content",
+      genres: ".genres a, .tags a",
+      author: ".author-content",
+      artist: ".artist-content",
+      chapters: "li.wp-manga-chapter, .chapter-item",
+      chapterTitle: "a",
+      chapterUrl: "a",
+      chapterDate: ".chapter-release-date, .post-on",
+      pageImages: ".reading-content img, .page-break img"
+    }
+  },
+  "dilar": {
+    baseUrl: "https://dilar.tube",
+    selectors: {
+      title: "h1.manga-title, .title",
+      cover: ".manga-cover img, .cover img",
+      description: ".manga-description, .description",
+      status: ".manga-status, .status",
+      genres: ".genres a, .tags a",
+      author: ".author",
+      artist: ".artist",
+      chapters: ".chapter-item, .chapters li",
+      chapterTitle: "a, .chapter-title",
+      chapterUrl: "a",
+      chapterDate: ".chapter-date, .date",
+      pageImages: ".manga-page img, .page img"
+    }
+  },
+  "onma": {
+    baseUrl: "https://onma.top",
+    selectors: {
+      title: "h1.manga-title, .title",
+      cover: ".manga-cover img, img.cover",
+      description: ".manga-description, .summary",
+      status: ".manga-status, .status",
+      genres: ".genres a, .tags a",
+      author: ".author",
+      artist: ".artist",
+      chapters: ".chapter-item, .chapters-list li",
+      chapterTitle: "a, .chapter-title",
+      chapterUrl: "a",
+      chapterDate: ".chapter-date, .date",
+      pageImages: ".manga-reader img, .page-image"
     }
   }
 };
@@ -80,14 +147,15 @@ async function fetchWithRetry(url: string, config: typeof SCRAPER_CONFIGS['lekma
   try {
     console.log(`Fetching ${url} (attempt ${retryCount + 1}/${MAX_RETRIES + 1})`);
     
-    // Add random delay to avoid rate limiting
-    await delay(1000 + Math.random() * 2000);
+    // Add random delay to avoid rate limiting (2-5 seconds)
+    await delay(2000 + Math.random() * 3000);
     
     const response = await fetch(url, {
       method: 'GET',
       headers: {
-        ...config.headers,
+        ...getBaseHeaders(),
         'Referer': config.baseUrl,
+        'Origin': config.baseUrl,
       },
     });
 
