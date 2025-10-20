@@ -6,16 +6,19 @@ import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Database, Download, RefreshCw, CheckCircle, XCircle, Clock, Plus, BookPlus } from "lucide-react";
+import { Database, Download, RefreshCw, CheckCircle, XCircle, Clock, Plus, BookPlus, Globe } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { AddMangaForm } from "@/components/admin/AddMangaForm";
 import { AddChapterForm } from "@/components/admin/AddChapterForm";
+import { SourcesManager } from "@/components/admin/SourcesManager";
 import { useNavigate } from "react-router-dom";
 
 const Admin = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
   const [mangaUrl, setMangaUrl] = useState("");
+  const [selectedSource, setSelectedSource] = useState("lekmanga");
+  const [sources, setSources] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [jobs, setJobs] = useState<any[]>([]);
   const [mangaList, setMangaList] = useState<any[]>([]);
@@ -24,12 +27,27 @@ const Admin = () => {
     checkAuth();
     fetchJobs();
     fetchManga();
+    fetchSources();
   }, []);
 
   const checkAuth = async () => {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) {
       navigate("/auth");
+    }
+  };
+
+  const fetchSources = async () => {
+    const { data, error } = await supabase
+      .from("scraper_sources")
+      .select("*")
+      .eq("is_active", true);
+    
+    if (!error && data) {
+      setSources(data);
+      if (data.length > 0 && !selectedSource) {
+        setSelectedSource(data[0].name);
+      }
     }
   };
 
@@ -61,10 +79,29 @@ const Admin = () => {
   };
 
   const handleScrapeManga = async () => {
-    if (!mangaUrl.includes("lekmanga.net")) {
+    if (!mangaUrl) {
       toast({
         title: "خطأ",
-        description: "الرجاء إدخال رابط صحيح من موقع lekmanga.net",
+        description: "الرجاء إدخال رابط المانجا",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const selectedSourceObj = sources.find(s => s.name === selectedSource);
+    if (!selectedSourceObj) {
+      toast({
+        title: "خطأ",
+        description: "الرجاء اختيار مصدر صحيح",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!mangaUrl.includes(selectedSourceObj.base_url.replace('https://', '').replace('http://', ''))) {
+      toast({
+        title: "خطأ",
+        description: `الرجاء إدخال رابط صحيح من ${selectedSourceObj.base_url}`,
         variant: "destructive",
       });
       return;
@@ -77,7 +114,7 @@ const Admin = () => {
       const { data: infoData, error: infoError } = await supabase.functions.invoke(
         "scrape-lekmanga",
         {
-          body: { url: mangaUrl, jobType: "manga_info" },
+          body: { url: mangaUrl, jobType: "manga_info", source: selectedSource },
         }
       );
 
@@ -92,7 +129,7 @@ const Admin = () => {
       const { data: chaptersData, error: chaptersError } = await supabase.functions.invoke(
         "scrape-lekmanga",
         {
-          body: { url: mangaUrl, jobType: "chapters" },
+          body: { url: mangaUrl, jobType: "chapters", source: selectedSource },
         }
       );
 
@@ -184,21 +221,33 @@ const Admin = () => {
                   سحب مانجا تلقائياً
                 </h2>
                 <p className="text-muted-foreground">
-                  أدخل رابط المانجا من lekmanga.net لسحب المعلومات والفصول تلقائياً
+                  اختر المصدر وأدخل رابط المانجا لسحب المعلومات والفصول تلقائياً
                 </p>
               </div>
               
-              <div className="flex gap-4">
+              <div className="flex gap-4 flex-wrap">
+                <select
+                  value={selectedSource}
+                  onChange={(e) => setSelectedSource(e.target.value)}
+                  className="px-4 py-2 bg-background border border-border text-foreground rounded-md min-w-[180px]"
+                >
+                  {sources.map((source) => (
+                    <option key={source.id} value={source.name}>
+                      {source.name} - {source.base_url}
+                    </option>
+                  ))}
+                </select>
+                
                 <Input
                   value={mangaUrl}
                   onChange={(e) => setMangaUrl(e.target.value)}
-                  placeholder="https://lekmanga.net/manga/..."
+                  placeholder={sources.find(s => s.name === selectedSource)?.base_url + "/manga/..." || "URL"}
                   className="flex-1 bg-background border-border text-foreground"
                   dir="ltr"
                 />
                 <Button 
                   onClick={handleScrapeManga}
-                  disabled={isLoading || !mangaUrl}
+                  disabled={isLoading || !mangaUrl || sources.length === 0}
                   className="min-w-[120px]"
                 >
                   {isLoading ? (
@@ -214,10 +263,14 @@ const Admin = () => {
 
           {/* Tabs */}
           <Tabs defaultValue="manga" className="w-full">
-            <TabsList className="grid w-full max-w-6xl grid-cols-6">
+            <TabsList className="grid w-full max-w-6xl grid-cols-7">
               <TabsTrigger value="manga">مانجا</TabsTrigger>
               <TabsTrigger value="manhwa">مانهوا</TabsTrigger>
               <TabsTrigger value="manhua">مانها</TabsTrigger>
+              <TabsTrigger value="sources">
+                <Globe className="w-4 h-4 mr-2" />
+                المصادر
+              </TabsTrigger>
               <TabsTrigger value="add-manga">
                 <Plus className="w-4 h-4 mr-2" />
                 إضافة
@@ -350,6 +403,11 @@ const Admin = () => {
                   </div>
                 )}
               </div>
+            </TabsContent>
+
+            {/* Sources Tab */}
+            <TabsContent value="sources" className="mt-6">
+              <SourcesManager />
             </TabsContent>
 
             <TabsContent value="add-manga" className="mt-6">
