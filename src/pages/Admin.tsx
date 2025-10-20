@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { AddMangaForm } from "@/components/admin/AddMangaForm";
 import { AddChapterForm } from "@/components/admin/AddChapterForm";
 import { SourcesManager } from "@/components/admin/SourcesManager";
+import { CloudflareNotice } from "@/components/admin/CloudflareNotice";
 import { useNavigate } from "react-router-dom";
 
 const Admin = () => {
@@ -214,6 +215,8 @@ const Admin = () => {
 
           {/* Scraper Section */}
           <Card className="p-6 bg-card border-border">
+            <CloudflareNotice />
+            
             <div className="space-y-4">
               <div>
                 <h2 className="text-2xl font-bold text-foreground mb-2">
