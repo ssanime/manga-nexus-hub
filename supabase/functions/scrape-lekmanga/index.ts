@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { DOMParser } from "https://deno.land/x/deno_dom@v0.1.38/deno-dom-wasm.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -8,185 +9,328 @@ const corsHeaders = {
 
 interface ScrapeMangaRequest {
   url: string;
-  jobType: 'manga_info' | 'chapters' | 'pages';
+  jobType: "manga_info" | "chapters" | "pages";
   chapterId?: string;
+  source?: string;
 }
 
-// Extract manga slug from URL
+// Configuration for different sources
+const SCRAPER_CONFIGS: Record<string, {
+  baseUrl: string;
+  selectors: {
+    title: string;
+    cover: string;
+    description: string;
+    status: string;
+    genres: string;
+    author: string;
+    artist: string;
+    chapters: string;
+    chapterTitle: string;
+    chapterUrl: string;
+    chapterDate: string;
+    pageImages: string;
+  };
+  headers: HeadersInit;
+}> = {
+  "lekmanga": {
+    baseUrl: "https://lekmanga.net",
+    selectors: {
+      title: "h1.entry-title, .post-title, h1.manga-title",
+      cover: ".summary_image img, img.wp-post-image, .manga-cover img",
+      description: ".summary__content, .description-summary .summary__content, .manga-excerpt",
+      status: ".post-status .summary-content, .manga-status",
+      genres: ".genres-content a, .manga-genres a",
+      author: ".author-content, .manga-author",
+      artist: ".artist-content, .manga-artist",
+      chapters: "li.wp-manga-chapter, .chapter-item",
+      chapterTitle: "a",
+      chapterUrl: "a",
+      chapterDate: ".chapter-release-date",
+      pageImages: ".reading-content img, img.wp-manga-chapter-img, .page-break img"
+    },
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+      'Accept-Language': 'en-US,en;q=0.9,ar;q=0.8',
+      'Accept-Encoding': 'gzip, deflate, br',
+      'Connection': 'keep-alive',
+      'Upgrade-Insecure-Requests': '1',
+      'Sec-Fetch-Dest': 'document',
+      'Sec-Fetch-Mode': 'navigate',
+      'Sec-Fetch-Site': 'none',
+      'Sec-Fetch-User': '?1',
+      'Cache-Control': 'max-age=0',
+      'sec-ch-ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+      'sec-ch-ua-mobile': '?0',
+      'sec-ch-ua-platform': '"Windows"',
+    }
+  }
+};
+
+// Retry configuration
+const MAX_RETRIES = 3;
+const RETRY_DELAYS = [2000, 5000, 10000]; // milliseconds
+
+async function delay(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function fetchWithRetry(url: string, config: typeof SCRAPER_CONFIGS['lekmanga'], retryCount = 0): Promise<string> {
+  try {
+    console.log(`Fetching ${url} (attempt ${retryCount + 1}/${MAX_RETRIES + 1})`);
+    
+    // Add random delay to avoid rate limiting
+    await delay(1000 + Math.random() * 2000);
+    
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        ...config.headers,
+        'Referer': config.baseUrl,
+      },
+    });
+
+    console.log(`Response status for ${url}: ${response.status}`);
+    
+    if (!response.ok) {
+      if (response.status === 403 || response.status === 503) {
+        throw new Error(`Cloudflare challenge detected (${response.status})`);
+      }
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    const html = await response.text();
+    
+    // Check if we got a Cloudflare challenge page
+    if (html.includes('challenge-platform') || html.includes('cf-browser-verification')) {
+      throw new Error('Cloudflare challenge page detected');
+    }
+    
+    return html;
+  } catch (error) {
+    console.error(`Fetch error (attempt ${retryCount + 1}):`, error);
+    
+    if (retryCount < MAX_RETRIES) {
+      const delayMs = RETRY_DELAYS[retryCount];
+      console.log(`Retrying after ${delayMs}ms...`);
+      await delay(delayMs);
+      return fetchWithRetry(url, config, retryCount + 1);
+    }
+    
+    throw error;
+  }
+}
+
 function extractSlug(url: string): string {
   const match = url.match(/\/manga\/([^\/]+)/);
   return match ? match[1] : '';
 }
 
-// Parse manga info from HTML
-async function scrapeMangaInfo(url: string) {
-  console.log('Scraping manga info from:', url);
-  
-  try {
-    // Add delay to avoid rate limiting
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    const response = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-        'Accept-Language': 'ar,en-US;q=0.9,en;q=0.8',
-        'Accept-Encoding': 'gzip, deflate, br',
-        'Referer': 'https://lekmanga.net/',
-        'DNT': '1',
-        'Connection': 'keep-alive',
-        'Upgrade-Insecure-Requests': '1',
-        'Sec-Fetch-Dest': 'document',
-        'Sec-Fetch-Mode': 'navigate',
-        'Sec-Fetch-Site': 'same-origin',
-        'Sec-Fetch-User': '?1',
-        'Cache-Control': 'max-age=0',
-        'sec-ch-ua': '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
-        'sec-ch-ua-mobile': '?0',
-        'sec-ch-ua-platform': '"Windows"'
+function tryMultipleSelectors(doc: any, selectors: string): string | null {
+  const selectorList = selectors.split(',').map(s => s.trim());
+  for (const selector of selectorList) {
+    try {
+      const element = doc.querySelector(selector);
+      if (element) {
+        return element.textContent?.trim() || null;
       }
-    });
-    
-    if (!response.ok) {
-      throw new Error(`Failed to fetch: ${response.status}`);
+    } catch (e) {
+      console.log(`Selector ${selector} failed, trying next...`);
     }
-    
-    const html = await response.text();
-    
-    // Extract data using regex patterns for Madara theme
-    const titleMatch = html.match(/<h1[^>]*class="[^"]*post-title[^"]*"[^>]*>([^<]+)<\/h1>/i);
-    const coverMatch = html.match(/<div[^>]*class="[^"]*summary_image[^"]*"[^>]*>[\s\S]*?<img[^>]*src="([^"]+)"/i);
-    const descMatch = html.match(/<div[^>]*class="[^"]*summary__content[^"]*"[^>]*>([\s\S]*?)<\/div>/i);
-    const statusMatch = html.match(/<div[^>]*class="[^"]*summary-content[^"]*"[^>]*>[\s\S]*?(ongoing|completed|مستمرة|مكتملة)/i);
-    const ratingMatch = html.match(/<span[^>]*class="[^"]*score[^"]*"[^>]*>([0-9.]+)<\/span>/i);
-    
-    // Extract genres
-    const genresMatches = html.matchAll(/<a[^>]*rel="tag"[^>]*>([^<]+)<\/a>/gi);
-    const genres: string[] = [];
-    for (const match of genresMatches) {
-      genres.push(match[1].trim());
-    }
-    
-    // Extract author/artist
-    const authorMatch = html.match(/<div[^>]*class="[^"]*author-content[^"]*"[^>]*>[\s\S]*?<a[^>]*>([^<]+)<\/a>/i);
-    
-    const title = titleMatch ? titleMatch[1].trim() : 'Unknown';
-    const slug = extractSlug(url);
-    
-    return {
-      title,
-      slug,
-      cover_url: coverMatch ? coverMatch[1] : null,
-      description: descMatch ? descMatch[1].replace(/<[^>]*>/g, '').trim() : null,
-      status: statusMatch ? (statusMatch[1].includes('مكتمل') || statusMatch[1] === 'completed' ? 'completed' : 'ongoing') : 'ongoing',
-      rating: ratingMatch ? parseFloat(ratingMatch[1]) : 0,
-      genres,
-      author: authorMatch ? authorMatch[1].trim() : null,
-      artist: authorMatch ? authorMatch[1].trim() : null,
-      source_url: url,
-    };
-  } catch (error) {
-    console.error('Error scraping manga info:', error);
-    throw error;
   }
+  return null;
 }
 
-// Parse chapters list from HTML
-async function scrapeChapters(mangaUrl: string) {
-  console.log('Scraping chapters from:', mangaUrl);
-  
-  try {
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    const response = await fetch(mangaUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-        'Accept-Language': 'ar,en-US;q=0.9,en;q=0.8',
-        'Referer': 'https://lekmanga.net/',
-        'sec-ch-ua': '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
-        'sec-ch-ua-mobile': '?0',
-        'sec-ch-ua-platform': '"Windows"'
+function tryMultipleSelectorsForAttr(doc: any, selectors: string, attr: string): string | null {
+  const selectorList = selectors.split(',').map(s => s.trim());
+  for (const selector of selectorList) {
+    try {
+      const element = doc.querySelector(selector);
+      if (element) {
+        return element.getAttribute(attr) || null;
       }
-    });
-    
-    if (!response.ok) {
-      throw new Error(`Failed to fetch: ${response.status}`);
+    } catch (e) {
+      console.log(`Selector ${selector} failed, trying next...`);
     }
-    
-    const html = await response.text();
-    
-    // Extract chapter links (Madara theme structure)
-    const chapterMatches = html.matchAll(/<li[^>]*class="[^"]*wp-manga-chapter[^"]*"[^>]*>[\s\S]*?<a[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>[\s\S]*?<span[^>]*class="[^"]*chapter-release-date[^"]*"[^>]*>([^<]*)<\/span>/gi);
-    
-    const chapters = [];
-    for (const match of chapterMatches) {
-      const chapterUrl = match[1];
-      const chapterText = match[2].replace(/<[^>]*>/g, '').trim();
-      const releaseDate = match[3].trim();
-      
-      // Extract chapter number
-      const numberMatch = chapterText.match(/(\d+(?:\.\d+)?)/);
-      const chapterNumber = numberMatch ? parseFloat(numberMatch[1]) : 0;
-      
-      chapters.push({
-        chapter_number: chapterNumber,
-        title: chapterText,
-        source_url: chapterUrl,
-        release_date: releaseDate,
-      });
-    }
-    
-    return chapters.reverse(); // Return in ascending order
-  } catch (error) {
-    console.error('Error scraping chapters:', error);
-    throw error;
   }
+  return null;
 }
 
-// Parse chapter pages from HTML
-async function scrapeChapterPages(chapterUrl: string) {
-  console.log('Scraping chapter pages from:', chapterUrl);
+async function scrapeMangaInfo(url: string, source = "lekmanga") {
+  console.log(`Scraping manga info from ${source}:`, url);
+  
+  const config = SCRAPER_CONFIGS[source];
+  if (!config) {
+    throw new Error(`Unknown source: ${source}`);
+  }
+
+  const html = await fetchWithRetry(url, config);
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  
+  if (!doc) {
+    throw new Error('Failed to parse HTML');
+  }
+
+  // Extract data using flexible selectors
+  const title = tryMultipleSelectors(doc, config.selectors.title) || '';
+  const cover = tryMultipleSelectorsForAttr(doc, config.selectors.cover, 'src') || 
+                tryMultipleSelectorsForAttr(doc, config.selectors.cover, 'data-src') || '';
+  const description = tryMultipleSelectors(doc, config.selectors.description) || '';
+  const status = tryMultipleSelectors(doc, config.selectors.status) || 'ongoing';
+  const author = tryMultipleSelectors(doc, config.selectors.author) || '';
+  const artist = tryMultipleSelectors(doc, config.selectors.artist) || '';
+
+  // Extract genres
+  const genres: string[] = [];
+  try {
+    const genreElements = doc.querySelectorAll(config.selectors.genres);
+    genreElements.forEach((el: any) => {
+      const genre = el.textContent?.trim();
+      if (genre) genres.push(genre);
+    });
+  } catch (e) {
+    console.log('Failed to extract genres:', e);
+  }
+
+  const slug = extractSlug(url);
+
+  const mangaData = {
+    title,
+    slug,
+    description,
+    cover_url: cover,
+    status: status.toLowerCase().includes('ongoing') || status.toLowerCase().includes('مستمر') ? 'ongoing' : 'completed',
+    genres: genres.length > 0 ? genres : null,
+    author: author || null,
+    artist: artist || null,
+    source_url: url,
+    source,
+  };
+
+  console.log("Extracted manga data:", mangaData);
+  return mangaData;
+}
+
+async function scrapeChapters(mangaUrl: string, source = "lekmanga") {
+  console.log(`Scraping chapters from ${source}:`, mangaUrl);
+  
+  const config = SCRAPER_CONFIGS[source];
+  if (!config) {
+    throw new Error(`Unknown source: ${source}`);
+  }
+
+  const html = await fetchWithRetry(mangaUrl, config);
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  
+  if (!doc) {
+    throw new Error('Failed to parse HTML');
+  }
+
+  const chapters: any[] = [];
   
   try {
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    const response = await fetch(chapterUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-        'Accept-Language': 'ar,en-US;q=0.9,en;q=0.8',
-        'Referer': 'https://lekmanga.net/',
-        'sec-ch-ua': '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
-        'sec-ch-ua-mobile': '?0',
-        'sec-ch-ua-platform': '"Windows"'
+    const chapterElements = doc.querySelectorAll(config.selectors.chapters);
+    console.log(`Found ${chapterElements.length} chapter elements`);
+
+    chapterElements.forEach((chapterEl: any, index: number) => {
+      try {
+        const linkEl = chapterEl.querySelector(config.selectors.chapterUrl);
+        const titleEl = chapterEl.querySelector(config.selectors.chapterTitle);
+        const dateEl = chapterEl.querySelector(config.selectors.chapterDate);
+
+        const chapterUrl = linkEl?.getAttribute('href') || '';
+        let title = titleEl?.textContent?.trim() || '';
+        const dateText = dateEl?.textContent?.trim() || '';
+
+        // Extract chapter number from title or URL
+        let chapterNumber = 0;
+        const chapterMatch = title.match(/(\d+\.?\d*)/);
+        if (chapterMatch) {
+          chapterNumber = parseFloat(chapterMatch[1]);
+        } else {
+          // Try to extract from URL
+          const urlMatch = chapterUrl.match(/chapter[_-](\d+\.?\d*)/i);
+          if (urlMatch) {
+            chapterNumber = parseFloat(urlMatch[1]);
+          } else {
+            // Use reverse index as fallback
+            chapterNumber = chapterElements.length - index;
+          }
+        }
+
+        if (chapterUrl) {
+          chapters.push({
+            chapter_number: chapterNumber,
+            title: title || `Chapter ${chapterNumber}`,
+            source_url: chapterUrl.startsWith('http') ? chapterUrl : `${config.baseUrl}${chapterUrl}`,
+            release_date: dateText || null,
+          });
+        }
+      } catch (e) {
+        console.error(`Error processing chapter ${index}:`, e);
       }
     });
-    
-    if (!response.ok) {
-      throw new Error(`Failed to fetch: ${response.status}`);
-    }
-    
-    const html = await response.text();
-    
-    // Extract image URLs (Madara theme)
-    const imageMatches = html.matchAll(/<img[^>]*class="[^"]*wp-manga-chapter-img[^"]*"[^>]*src="([^"]+)"/gi);
-    
-    const pages = [];
-    let pageNumber = 1;
-    
-    for (const match of imageMatches) {
-      pages.push({
-        page_number: pageNumber++,
-        image_url: match[1].trim(),
-      });
-    }
-    
-    return pages;
-  } catch (error) {
-    console.error('Error scraping chapter pages:', error);
-    throw error;
+  } catch (e) {
+    console.error('Error extracting chapters:', e);
+    throw e;
   }
+
+  console.log(`Extracted ${chapters.length} chapters`);
+  return chapters;
+}
+
+async function scrapeChapterPages(chapterUrl: string, source = "lekmanga") {
+  console.log(`Scraping pages from ${source} chapter:`, chapterUrl);
+  
+  const config = SCRAPER_CONFIGS[source];
+  if (!config) {
+    throw new Error(`Unknown source: ${source}`);
+  }
+
+  const html = await fetchWithRetry(chapterUrl, config);
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  
+  if (!doc) {
+    throw new Error('Failed to parse HTML');
+  }
+
+  const pages: any[] = [];
+  
+  try {
+    const imageElements = doc.querySelectorAll(config.selectors.pageImages);
+    console.log(`Found ${imageElements.length} image elements`);
+
+    imageElements.forEach((img: any, index: number) => {
+      try {
+        let imageUrl = img.getAttribute('src') || 
+                      img.getAttribute('data-src') || 
+                      img.getAttribute('data-lazy-src') || '';
+        
+        if (imageUrl && !imageUrl.includes('loading') && !imageUrl.includes('placeholder')) {
+          // Clean up image URL
+          if (imageUrl.startsWith('//')) {
+            imageUrl = 'https:' + imageUrl;
+          } else if (!imageUrl.startsWith('http')) {
+            imageUrl = config.baseUrl + imageUrl;
+          }
+          
+          pages.push({
+            page_number: index + 1,
+            image_url: imageUrl
+          });
+        }
+      } catch (e) {
+        console.error(`Error processing image ${index}:`, e);
+      }
+    });
+  } catch (e) {
+    console.error('Error extracting pages:', e);
+    throw e;
+  }
+
+  console.log(`Extracted ${pages.length} pages`);
+  return pages;
 }
 
 serve(async (req) => {
@@ -195,27 +339,24 @@ serve(async (req) => {
   }
 
   try {
-    const supabaseClient = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
-    );
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseKey);
 
-    const { url, jobType, chapterId } = await req.json() as ScrapeMangaRequest;
-
-    if (!url) {
-      throw new Error('URL is required');
+    const { url, jobType, chapterId, source = "lekmanga" } = await req.json() as ScrapeMangaRequest;
+    
+    // Validate source
+    if (!SCRAPER_CONFIGS[source]) {
+      throw new Error(`Unsupported source: ${source}. Available sources: ${Object.keys(SCRAPER_CONFIGS).join(', ')}`);
     }
 
-    console.log(`Starting scrape job: ${jobType} for ${url}`);
+    console.log(`Starting ${jobType} job for ${source}: ${url || chapterId}`);
 
-    let result: any;
-    let jobId: string | null = null;
-
-    // Create scrape job
-    const { data: job, error: jobError } = await supabaseClient
+    // Create job record
+    const { data: job, error: jobError } = await supabase
       .from('scrape_jobs')
       .insert({
-        source_url: url,
+        source_url: url || 'pages_job',
         status: 'processing',
         job_type: jobType,
       })
@@ -223,19 +364,18 @@ serve(async (req) => {
       .single();
 
     if (jobError) {
-      console.error('Failed to create job:', jobError);
+      console.error('Error creating job:', jobError);
       throw jobError;
     }
 
-    jobId = job.id;
+    const jobId = job.id;
+    let result: any;
 
     try {
-      if (jobType === 'manga_info') {
-        // Scrape manga info
-        const mangaData = await scrapeMangaInfo(url);
+      if (jobType === "manga_info") {
+        const mangaData = await scrapeMangaInfo(url, source);
         
-        // Insert or update manga
-        const { data: manga, error: mangaError } = await supabaseClient
+        const { data: manga, error: mangaError } = await supabase
           .from('manga')
           .upsert({
             ...mangaData,
@@ -247,36 +387,31 @@ serve(async (req) => {
           .single();
 
         if (mangaError) throw mangaError;
-
         result = manga;
 
-        // Update job with manga_id
-        await supabaseClient
+        await supabase
           .from('scrape_jobs')
           .update({ manga_id: manga.id, status: 'completed' })
           .eq('id', jobId);
 
-      } else if (jobType === 'chapters') {
-        // Scrape chapters
-        const chapters = await scrapeChapters(url);
-        
-        // Get manga by URL
+      } else if (jobType === "chapters") {
+        const chapters = await scrapeChapters(url, source);
         const slug = extractSlug(url);
-        const { data: manga } = await supabaseClient
+        
+        const { data: manga } = await supabase
           .from('manga')
           .select('id')
           .eq('slug', slug)
           .single();
 
-        if (!manga) throw new Error('Manga not found');
+        if (!manga) throw new Error('Manga not found. Please scrape manga info first.');
 
-        // Insert chapters
         const chaptersData = chapters.map(ch => ({
           ...ch,
           manga_id: manga.id,
         }));
 
-        const { data: insertedChapters, error: chaptersError } = await supabaseClient
+        const { data: insertedChapters, error: chaptersError } = await supabase
           .from('chapters')
           .upsert(chaptersData, {
             onConflict: 'manga_id,chapter_number',
@@ -284,18 +419,15 @@ serve(async (req) => {
           .select();
 
         if (chaptersError) throw chaptersError;
-
         result = insertedChapters;
 
-        // Update job
-        await supabaseClient
+        await supabase
           .from('scrape_jobs')
           .update({ manga_id: manga.id, status: 'completed' })
           .eq('id', jobId);
 
-      } else if (jobType === 'pages' && chapterId) {
-        // Get chapter info
-        const { data: chapter } = await supabaseClient
+      } else if (jobType === "pages" && chapterId) {
+        const { data: chapter } = await supabase
           .from('chapters')
           .select('source_url')
           .eq('id', chapterId)
@@ -303,16 +435,14 @@ serve(async (req) => {
 
         if (!chapter) throw new Error('Chapter not found');
 
-        // Scrape pages
-        const pages = await scrapeChapterPages(chapter.source_url);
+        const pages = await scrapeChapterPages(chapter.source_url, source);
         
-        // Insert pages
         const pagesData = pages.map(p => ({
           ...p,
           chapter_id: chapterId,
         }));
 
-        const { data: insertedPages, error: pagesError } = await supabaseClient
+        const { data: insertedPages, error: pagesError } = await supabase
           .from('chapter_pages')
           .upsert(pagesData, {
             onConflict: 'chapter_id,page_number',
@@ -320,17 +450,13 @@ serve(async (req) => {
           .select();
 
         if (pagesError) throw pagesError;
-
         result = insertedPages;
 
-        // Update job
-        await supabaseClient
+        await supabase
           .from('scrape_jobs')
           .update({ status: 'completed' })
           .eq('id', jobId);
       }
-
-      console.log(`Scrape job completed: ${jobType}`);
 
       return new Response(
         JSON.stringify({ success: true, data: result }),
@@ -340,34 +466,34 @@ serve(async (req) => {
     } catch (scrapeError: any) {
       console.error('Scrape error:', scrapeError);
       
-      // Update job status to failed
-      if (jobId) {
-        const { data: failedJob } = await supabaseClient
-          .from('scrape_jobs')
-          .select('retry_count, max_retries')
-          .eq('id', jobId)
-          .single();
+      const { data: failedJob } = await supabase
+        .from('scrape_jobs')
+        .select('retry_count, max_retries')
+        .eq('id', jobId)
+        .single();
 
-        const retryCount = (failedJob?.retry_count || 0) + 1;
-        const maxRetries = failedJob?.max_retries || 3;
+      const retryCount = (failedJob?.retry_count || 0) + 1;
+      const maxRetries = failedJob?.max_retries || 3;
 
-        await supabaseClient
-          .from('scrape_jobs')
-          .update({
-            status: retryCount >= maxRetries ? 'failed' : 'pending',
-            error_message: scrapeError?.message || 'Unknown error',
-            retry_count: retryCount,
-          })
-          .eq('id', jobId);
-      }
+      await supabase
+        .from('scrape_jobs')
+        .update({
+          status: retryCount >= maxRetries ? 'failed' : 'pending',
+          error_message: scrapeError?.message || 'Unknown error',
+          retry_count: retryCount,
+        })
+        .eq('id', jobId);
 
       throw scrapeError;
     }
 
   } catch (error: any) {
-    console.error('Error in scrape-lekmanga function:', error);
+    console.error('Error in scrape function:', error);
     return new Response(
-      JSON.stringify({ error: error?.message || 'Unknown error' }),
+      JSON.stringify({ 
+        success: false, 
+        error: error?.message || 'Unknown error' 
+      }),
       {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

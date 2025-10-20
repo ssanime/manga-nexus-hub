@@ -175,6 +175,43 @@ const Admin = () => {
           </div>
 
 
+          {/* Scraper Section */}
+          <Card className="p-6 bg-card border-border">
+            <div className="space-y-4">
+              <div>
+                <h2 className="text-2xl font-bold text-foreground mb-2">
+                  <Download className="w-6 h-6 inline-block ml-2" />
+                  سحب مانجا تلقائياً
+                </h2>
+                <p className="text-muted-foreground">
+                  أدخل رابط المانجا من lekmanga.net لسحب المعلومات والفصول تلقائياً
+                </p>
+              </div>
+              
+              <div className="flex gap-4">
+                <Input
+                  value={mangaUrl}
+                  onChange={(e) => setMangaUrl(e.target.value)}
+                  placeholder="https://lekmanga.net/manga/..."
+                  className="flex-1 bg-background border-border text-foreground"
+                  dir="ltr"
+                />
+                <Button 
+                  onClick={handleScrapeManga}
+                  disabled={isLoading || !mangaUrl}
+                  className="min-w-[120px]"
+                >
+                  {isLoading ? (
+                    <RefreshCw className="w-4 h-4 ml-2 animate-spin" />
+                  ) : (
+                    <Download className="w-4 h-4 ml-2" />
+                  )}
+                  {isLoading ? "جاري السحب..." : "سحب المحتوى"}
+                </Button>
+              </div>
+            </div>
+          </Card>
+
           {/* Tabs */}
           <Tabs defaultValue="manga" className="w-full">
             <TabsList className="grid w-full max-w-6xl grid-cols-6">
