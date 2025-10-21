@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 
 interface MangaCardProps {
   id: string;
+  slug: string;
   title: string;
   coverUrl: string;
   rating?: number;
@@ -15,6 +16,7 @@ interface MangaCardProps {
 
 export const MangaCard = ({
   id,
+  slug,
   title,
   coverUrl,
   rating = 0,
@@ -23,7 +25,7 @@ export const MangaCard = ({
   isNew = false,
 }: MangaCardProps) => {
   return (
-    <Link to={`/manga/${id}`}>
+    <Link to={`/manga/${slug}`}>
       <Card className="group relative overflow-hidden border-border bg-card transition-all duration-300 hover:shadow-manga-card-hover hover:scale-[1.02]">
         {/* Cover Image */}
         <div className="relative aspect-[3/4] overflow-hidden bg-secondary">

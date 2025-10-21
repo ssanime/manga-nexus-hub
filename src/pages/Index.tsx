@@ -91,6 +91,7 @@ const Index = () => {
             <MangaCard 
               key={manga.id}
               id={manga.id}
+              slug={manga.slug}
               title={manga.title}
               coverUrl={manga.cover_url || ''}
               rating={manga.rating || 0}
@@ -122,6 +123,7 @@ const Index = () => {
             <MangaCard 
               key={manga.id}
               id={manga.id}
+              slug={manga.slug}
               title={manga.title}
               coverUrl={manga.cover_url || ''}
               rating={manga.rating || 0}
@@ -153,6 +155,7 @@ const Index = () => {
             <MangaCard 
               key={manga.id}
               id={manga.id}
+              slug={manga.slug}
               title={manga.title}
               coverUrl={manga.cover_url || ''}
               rating={manga.rating || 0}
