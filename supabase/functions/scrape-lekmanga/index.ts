@@ -118,18 +118,18 @@ const SCRAPER_CONFIGS: Record<string, {
   "azoramoon": {
     baseUrl: "https://azoramoon.com",
     selectors: {
-      title: "h1.entry-title, .post-title",
-      cover: ".summary_image img, img.wp-post-image",
-      description: ".summary__content, .description",
+      title: ".post-title h1, h1.entry-title",
+      cover: ".summary_image img",
+      description: ".manga-summary p, .summary__content p",
       status: ".post-status, .summary-content",
-      genres: ".genres a, .tags a",
-      author: ".author-content",
-      artist: ".artist-content",
-      chapters: "li.wp-manga-chapter, .chapter-item",
+      genres: ".genres-content a",
+      author: ".manga-authors, .author-content",
+      artist: ".manga-artists, .artist-content",
+      chapters: "li.wp-manga-chapter",
       chapterTitle: "a",
       chapterUrl: "a",
       chapterDate: ".chapter-release-date, .post-on",
-      pageImages: ".reading-content img, .page-break img"
+      pageImages: ".reading-content img, .page-break img, img.wp-manga-chapter-img"
     }
   },
   "dilar": {

@@ -156,7 +156,16 @@ const MangaDetail = () => {
             {manga.genres && manga.genres.length > 0 && (
               <div className="flex flex-wrap gap-2">
                 {manga.genres.map((genre) => (
-                  <Badge key={genre} variant="secondary">
+                  <Badge 
+                    key={genre} 
+                    variant="secondary"
+                    className="cursor-pointer hover:bg-primary hover:text-primary-foreground transition-colors"
+                    onClick={() => {
+                      // Navigate to manga page with genre filter
+                      const genreFilter = encodeURIComponent(genre);
+                      window.location.href = `/manga?genre=${genreFilter}`;
+                    }}
+                  >
                     {genre}
                   </Badge>
                 ))}
