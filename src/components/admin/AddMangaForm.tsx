@@ -84,11 +84,14 @@ export const AddMangaForm = ({ onSuccess }: { onSuccess: () => void }) => {
       }
 
       // Insert manga
+      const finalSlug = formData.slug || formData.title.toLowerCase().replace(/\s+/g, '-').replace(/[^\w\-]/g, '');
+      const manualSourceUrl = `${window.location.origin}/manga/${finalSlug}`;
+      
       const { error: insertError } = await supabase
         .from('manga')
         .insert({
           title: formData.title,
-          slug: formData.slug || formData.title.toLowerCase().replace(/\s+/g, '-'),
+          slug: finalSlug,
           alternative_titles: formData.alternative_titles ? formData.alternative_titles.split(',').map(t => t.trim()) : null,
           description: formData.description || null,
           author: formData.author || null,
@@ -99,7 +102,7 @@ export const AddMangaForm = ({ onSuccess }: { onSuccess: () => void }) => {
           rating: formData.rating ? parseFloat(formData.rating) : 0,
           year: formData.year ? parseInt(formData.year) : null,
           source: 'manual',
-          source_url: '',
+          source_url: manualSourceUrl,
         });
 
       if (insertError) throw insertError;
