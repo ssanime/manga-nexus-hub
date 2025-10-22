@@ -151,7 +151,7 @@ export const ScrapeFromURL = ({ onSuccess }: { onSuccess: () => void }) => {
                 </SelectTrigger>
                 <SelectContent>
                   {sources?.map(source => (
-                    <SelectItem key={source.id} value={source.name}>
+                    <SelectItem key={source.id} value={source.name || source.id}>
                       {source.name} - {source.base_url}
                     </SelectItem>
                   ))}
@@ -202,7 +202,7 @@ export const ScrapeFromURL = ({ onSuccess }: { onSuccess: () => void }) => {
                 </SelectTrigger>
                 <SelectContent>
                   {sources?.map(source => (
-                    <SelectItem key={source.id} value={source.name}>
+                    <SelectItem key={source.id} value={source.name || source.id}>
                       {source.name} - {source.base_url}
                     </SelectItem>
                   ))}

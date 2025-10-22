@@ -6,15 +6,10 @@ import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { X, Upload, Image as ImageIcon } from "lucide-react";
+import { X, Upload, Search } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-
-const COMMON_GENRES = [
-  "أكشن", "مغامرة", "كوميدي", "دراما", "فانتازيا", "رعب", 
-  "رومانسي", "خيال علمي", "إثارة", "رياضة", "شريحة من الحياة",
-  "خارق للطبيعة", "غموض", "نفسي", "مدرسي"
-];
+import { MANGA_GENRES } from "@/data/genres";
 
 export const AddMangaForm = ({ onSuccess }: { onSuccess: () => void }) => {
   const { toast } = useToast();
@@ -22,6 +17,7 @@ export const AddMangaForm = ({ onSuccess }: { onSuccess: () => void }) => {
   const [coverFile, setCoverFile] = useState<File | null>(null);
   const [coverPreview, setCoverPreview] = useState<string>("");
   const [selectedGenres, setSelectedGenres] = useState<string[]>([]);
+  const [genreSearch, setGenreSearch] = useState("");
   
   const [formData, setFormData] = useState({
     title: "",
@@ -34,7 +30,12 @@ export const AddMangaForm = ({ onSuccess }: { onSuccess: () => void }) => {
     cover_url: "",
     rating: "",
     year: "",
+    type: "manga",
   });
+
+  const filteredGenres = MANGA_GENRES.filter(genre => 
+    genre.toLowerCase().includes(genreSearch.toLowerCase())
+  );
 
   const handleCoverChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -124,10 +125,12 @@ export const AddMangaForm = ({ onSuccess }: { onSuccess: () => void }) => {
         cover_url: "",
         rating: "",
         year: "",
+        type: "manga",
       });
       setCoverFile(null);
       setCoverPreview("");
       setSelectedGenres([]);
+      setGenreSearch("");
       onSuccess();
     } catch (error: any) {
       toast({
@@ -187,6 +190,21 @@ export const AddMangaForm = ({ onSuccess }: { onSuccess: () => void }) => {
               onChange={(e) => setFormData({ ...formData, title: e.target.value })}
               placeholder="اسم المانجا"
             />
+          </div>
+
+          {/* Type */}
+          <div className="space-y-2">
+            <Label>النوع</Label>
+            <Select value={formData.type} onValueChange={(value) => setFormData({ ...formData, type: value })}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="manga">مانجا يابانية</SelectItem>
+                <SelectItem value="manhwa">مانهوا كورية</SelectItem>
+                <SelectItem value="manhua">مانها صينية</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           {/* Slug */}
@@ -269,17 +287,40 @@ export const AddMangaForm = ({ onSuccess }: { onSuccess: () => void }) => {
 
           {/* Genres */}
           <div className="space-y-2 md:col-span-2">
-            <Label>التصنيفات</Label>
-            <Select onValueChange={addGenre}>
-              <SelectTrigger>
-                <SelectValue placeholder="اختر التصنيفات" />
-              </SelectTrigger>
-              <SelectContent>
-                {COMMON_GENRES.map(genre => (
-                  <SelectItem key={genre} value={genre}>{genre}</SelectItem>
+            <Label>التصنيفات ({MANGA_GENRES.length} تصنيف متاح)</Label>
+            <div className="relative">
+              <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                value={genreSearch}
+                onChange={(e) => setGenreSearch(e.target.value)}
+                placeholder="ابحث عن تصنيف..."
+                className="pr-10"
+              />
+            </div>
+            <div className="max-h-40 overflow-y-auto border border-border rounded-md p-2">
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                {filteredGenres.slice(0, 50).map(genre => (
+                  <button
+                    key={genre}
+                    type="button"
+                    onClick={() => addGenre(genre)}
+                    disabled={selectedGenres.includes(genre)}
+                    className={`text-sm p-2 rounded border transition-colors text-right ${
+                      selectedGenres.includes(genre)
+                        ? 'bg-primary text-primary-foreground border-primary'
+                        : 'bg-background hover:bg-accent border-border'
+                    }`}
+                  >
+                    {genre}
+                  </button>
                 ))}
-              </SelectContent>
-            </Select>
+              </div>
+            </div>
+            {filteredGenres.length > 50 && (
+              <p className="text-xs text-muted-foreground">
+                عرض 50 من {filteredGenres.length} تصنيف - استخدم البحث لتضييق النتائج
+              </p>
+            )}
             <div className="flex flex-wrap gap-2 mt-2">
               {selectedGenres.map(genre => (
                 <Badge key={genre} variant="secondary" className="gap-1">

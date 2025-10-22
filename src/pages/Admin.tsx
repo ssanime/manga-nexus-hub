@@ -215,55 +215,10 @@ const Admin = () => {
 
 
           {/* Scraper Section */}
-          <Card className="p-6 bg-card border-border">
-            <CloudflareNotice />
-            
-            <div className="space-y-4">
-              <div>
-                <h2 className="text-2xl font-bold text-foreground mb-2">
-                  <Download className="w-6 h-6 inline-block ml-2" />
-                  سحب مانجا تلقائياً
-                </h2>
-                <p className="text-muted-foreground">
-                  اختر المصدر وأدخل رابط المانجا لسحب المعلومات والفصول تلقائياً
-                </p>
-              </div>
-              
-              <div className="flex gap-4 flex-wrap">
-                <select
-                  value={selectedSource}
-                  onChange={(e) => setSelectedSource(e.target.value)}
-                  className="px-4 py-2 bg-background border border-border text-foreground rounded-md min-w-[180px]"
-                >
-                  {sources.map((source) => (
-                    <option key={source.id} value={source.name}>
-                      {source.name} - {source.base_url}
-                    </option>
-                  ))}
-                </select>
-                
-                <Input
-                  value={mangaUrl}
-                  onChange={(e) => setMangaUrl(e.target.value)}
-                  placeholder={sources.find(s => s.name === selectedSource)?.base_url + "/manga/..." || "URL"}
-                  className="flex-1 bg-background border-border text-foreground"
-                  dir="ltr"
-                />
-                <Button 
-                  onClick={handleScrapeManga}
-                  disabled={isLoading || !mangaUrl || sources.length === 0}
-                  className="min-w-[120px]"
-                >
-                  {isLoading ? (
-                    <RefreshCw className="w-4 h-4 ml-2 animate-spin" />
-                  ) : (
-                    <Download className="w-4 h-4 ml-2" />
-                  )}
-                  {isLoading ? "جاري السحب..." : "سحب المحتوى"}
-                </Button>
-              </div>
-            </div>
-          </Card>
+          <ScrapeFromURL onSuccess={() => {
+            fetchJobs();
+            fetchManga();
+          }} />
 
           {/* Tabs */}
           <Tabs defaultValue="manga" className="w-full">
