@@ -9,9 +9,10 @@ const corsHeaders = {
 
 interface ScrapeMangaRequest {
   url: string;
-  jobType: "manga_info" | "chapters" | "pages";
+  jobType: "manga_info" | "chapters" | "pages" | "catalog";
   chapterId?: string;
   source?: string;
+  limit?: number;
 }
 
 // Advanced User-Agents with realistic browser fingerprints
@@ -96,6 +97,10 @@ const SCRAPER_CONFIGS: Record<string, {
     chapterUrl: string;
     chapterDate: string;
     pageImages: string;
+    year?: string;
+    catalogMangaCard?: string;
+    catalogMangaLink?: string;
+    catalogMangaCover?: string;
   };
 }> = {
   "lekmanga": {
@@ -150,20 +155,24 @@ const SCRAPER_CONFIGS: Record<string, {
     }
   },
   "onma": {
-    baseUrl: "https://onma.top",
+    baseUrl: "https://www.onma.top",
     selectors: {
-      title: "h1.manga-title, .title",
-      cover: ".manga-cover img, img.cover",
-      description: ".manga-description, .summary",
-      status: ".manga-status, .status",
-      genres: ".genres a, .tags a",
-      author: ".author",
-      artist: ".artist",
-      chapters: ".chapter-item, .chapters-list li",
-      chapterTitle: "a, .chapter-title",
-      chapterUrl: "a",
-      chapterDate: ".chapter-date, .date",
-      pageImages: ".manga-reader img, .page-image"
+      title: ".panel-heading",
+      cover: "img.img-responsive",
+      description: ".well p",
+      status: ".label",
+      genres: "h3:has-text('التصنيفات') .text a",
+      author: "h3:has-text('المؤلف') .text a",
+      artist: "h3:has-text('الرسام') .text a",
+      chapters: "ul.chapters li",
+      chapterTitle: ".chapter-title-rtl a",
+      chapterUrl: ".chapter-title-rtl a",
+      chapterDate: ".date-chapter-title-rtl",
+      pageImages: ".img-responsive, .chapter-img",
+      year: "h3:has-text('تاريخ الإصدار') .text",
+      catalogMangaCard: ".photo",
+      catalogMangaLink: ".manga-name a",
+      catalogMangaCover: ".thumbnail img"
     }
   }
 };
@@ -288,9 +297,29 @@ function tryMultipleSelectors(doc: any, selectors: string): string | null {
   const selectorList = selectors.split(',').map(s => s.trim());
   for (const selector of selectorList) {
     try {
-      const element = doc.querySelector(selector);
-      if (element) {
-        return element.textContent?.trim() || null;
+      // Handle special :has-text() selector
+      if (selector.includes(':has-text(')) {
+        const match = selector.match(/:has-text\(['"]([^'"]+)['"]\)/);
+        if (match) {
+          const searchText = match[1];
+          const baseSelector = selector.split(':has-text(')[0].trim();
+          const elements = doc.querySelectorAll(baseSelector);
+          for (const el of elements) {
+            if (el.textContent?.includes(searchText)) {
+              const targetSelector = selector.split(') ')[1];
+              if (targetSelector) {
+                const targetEl = el.querySelector(targetSelector);
+                if (targetEl) return targetEl.textContent?.trim() || null;
+              }
+              return el.textContent?.trim() || null;
+            }
+          }
+        }
+      } else {
+        const element = doc.querySelector(selector);
+        if (element) {
+          return element.textContent?.trim() || null;
+        }
       }
     } catch (e) {
       console.log(`Selector ${selector} failed, trying next...`);
@@ -330,22 +359,53 @@ async function scrapeMangaInfo(url: string, source = "lekmanga") {
   }
 
   // Extract data using flexible selectors
-  const title = tryMultipleSelectors(doc, config.selectors.title) || '';
-  const cover = tryMultipleSelectorsForAttr(doc, config.selectors.cover, 'src') || 
-                tryMultipleSelectorsForAttr(doc, config.selectors.cover, 'data-src') || '';
+  let title = tryMultipleSelectors(doc, config.selectors.title) || '';
+  let cover = tryMultipleSelectorsForAttr(doc, config.selectors.cover, 'src') || 
+              tryMultipleSelectorsForAttr(doc, config.selectors.cover, 'data-src') || '';
+  
+  // Make sure cover URL is absolute
+  if (cover && !cover.startsWith('http')) {
+    cover = cover.startsWith('//') ? 'https:' + cover : config.baseUrl + cover;
+  }
+  
   const description = tryMultipleSelectors(doc, config.selectors.description) || '';
-  const status = tryMultipleSelectors(doc, config.selectors.status) || 'ongoing';
+  const statusRaw = tryMultipleSelectors(doc, config.selectors.status) || 'ongoing';
   const author = tryMultipleSelectors(doc, config.selectors.author) || '';
   const artist = tryMultipleSelectors(doc, config.selectors.artist) || '';
+  
+  // Extract year if available
+  let year = null;
+  if (config.selectors.year) {
+    const yearText = tryMultipleSelectors(doc, config.selectors.year);
+    if (yearText) {
+      const yearMatch = yearText.match(/\d{4}/);
+      if (yearMatch) year = parseInt(yearMatch[0]);
+    }
+  }
 
   // Extract genres
   const genres: string[] = [];
   try {
-    const genreElements = doc.querySelectorAll(config.selectors.genres);
-    genreElements.forEach((el: any) => {
-      const genre = el.textContent?.trim();
-      if (genre) genres.push(genre);
-    });
+    // Special handling for onma.top genre selector
+    if (source === 'onma') {
+      const h3Elements = doc.querySelectorAll('h3');
+      for (const h3 of h3Elements) {
+        if (h3.textContent?.includes('التصنيفات')) {
+          const genreLinks = (h3 as any).querySelectorAll('.text a');
+          genreLinks.forEach((link: any) => {
+            const genre = link.textContent?.trim();
+            if (genre) genres.push(genre);
+          });
+          break;
+        }
+      }
+    } else {
+      const genreElements = doc.querySelectorAll(config.selectors.genres);
+      genreElements.forEach((el: any) => {
+        const genre = el.textContent?.trim();
+        if (genre) genres.push(genre);
+      });
+    }
   } catch (e) {
     console.log('Failed to extract genres:', e);
   }
@@ -357,10 +417,11 @@ async function scrapeMangaInfo(url: string, source = "lekmanga") {
     slug,
     description,
     cover_url: cover,
-    status: status.toLowerCase().includes('ongoing') || status.toLowerCase().includes('مستمر') ? 'ongoing' : 'completed',
+    status: statusRaw.toLowerCase().includes('ongoing') || statusRaw.toLowerCase().includes('مستمر') ? 'ongoing' : 'completed',
     genres: genres.length > 0 ? genres : null,
     author: author || null,
     artist: artist || null,
+    year,
     source_url: url,
     source,
   };
@@ -490,6 +551,53 @@ async function scrapeChapterPages(chapterUrl: string, source = "lekmanga") {
   return pages;
 }
 
+async function scrapeCatalog(source = "onma", limit = 20) {
+  console.log(`Scraping catalog from ${source}, limit: ${limit}`);
+  
+  const config = SCRAPER_CONFIGS[source];
+  if (!config) {
+    throw new Error(`Unknown source: ${source}`);
+  }
+
+  const html = await fetchWithRetry(config.baseUrl, config);
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  
+  if (!doc) {
+    throw new Error('Failed to parse HTML');
+  }
+
+  const mangaList: any[] = [];
+  
+  try {
+    const mangaCards = doc.querySelectorAll(config.selectors.catalogMangaCard || '.manga-item');
+    console.log(`Found ${mangaCards.length} manga cards in catalog`);
+    
+    let count = 0;
+    for (const card of mangaCards) {
+      if (count >= limit) break;
+      
+      try {
+        const linkEl = (card as any).querySelector(config.selectors.catalogMangaLink || 'a');
+        const mangaUrl = linkEl?.getAttribute('href');
+        
+        if (mangaUrl) {
+          const fullUrl = mangaUrl.startsWith('http') ? mangaUrl : config.baseUrl + mangaUrl;
+          mangaList.push({ url: fullUrl });
+          count++;
+        }
+      } catch (e) {
+        console.error('Error processing manga card:', e);
+      }
+    }
+  } catch (e) {
+    console.error('Error extracting catalog:', e);
+    throw e;
+  }
+
+  console.log(`Extracted ${mangaList.length} manga URLs from catalog`);
+  return mangaList;
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -500,7 +608,7 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    const { url, jobType, chapterId, source = "lekmanga" } = await req.json() as ScrapeMangaRequest;
+    const { url, jobType, chapterId, source = "lekmanga", limit = 20 } = await req.json() as ScrapeMangaRequest;
     
     // Validate source
     if (!SCRAPER_CONFIGS[source]) {
@@ -581,6 +689,69 @@ serve(async (req) => {
         await supabase
           .from('scrape_jobs')
           .update({ manga_id: manga.id, status: 'completed' })
+          .eq('id', jobId);
+
+      } else if (jobType === "catalog") {
+        const catalogManga = await scrapeCatalog(source, limit);
+        console.log(`Scraping ${catalogManga.length} manga from catalog...`);
+        
+        const scrapedManga: any[] = [];
+        
+        for (const item of catalogManga) {
+          try {
+            // Scrape manga info
+            const mangaData = await scrapeMangaInfo(item.url, source);
+            
+            const { data: manga, error: mangaError } = await supabase
+              .from('manga')
+              .upsert({
+                ...mangaData,
+                last_scraped_at: new Date().toISOString(),
+              }, {
+                onConflict: 'slug',
+              })
+              .select()
+              .single();
+
+            if (mangaError) {
+              console.error('Error inserting manga:', mangaError);
+              continue;
+            }
+            
+            // Scrape chapters
+            try {
+              const chapters = await scrapeChapters(item.url, source);
+              
+              if (chapters.length > 0) {
+                const chaptersData = chapters.map(ch => ({
+                  ...ch,
+                  manga_id: manga.id,
+                }));
+
+                await supabase
+                  .from('chapters')
+                  .upsert(chaptersData, {
+                    onConflict: 'manga_id,chapter_number',
+                  });
+              }
+            } catch (chaptersError) {
+              console.error(`Error scraping chapters for ${manga.title}:`, chaptersError);
+            }
+            
+            scrapedManga.push(manga);
+            
+            // Add delay between manga to avoid rate limiting
+            await delay(getRandomDelay(2000, 4000));
+          } catch (error) {
+            console.error(`Error scraping manga ${item.url}:`, error);
+          }
+        }
+        
+        result = scrapedManga;
+
+        await supabase
+          .from('scrape_jobs')
+          .update({ status: 'completed' })
           .eq('id', jobId);
 
       } else if (jobType === "pages" && chapterId) {

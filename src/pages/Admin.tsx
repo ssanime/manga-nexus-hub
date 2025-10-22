@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { AddMangaForm } from "@/components/admin/AddMangaForm";
 import { AddChapterForm } from "@/components/admin/AddChapterForm";
 import { SourcesManager } from "@/components/admin/SourcesManager";
+import { ScrapeFromURL } from "@/components/admin/ScrapeFromURL";
 import { CloudflareNotice } from "@/components/admin/CloudflareNotice";
 import { useNavigate } from "react-router-dom";
 
