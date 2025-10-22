@@ -66,21 +66,22 @@ const SCRAPER_CONFIGS: Record<string, any> = {
     }
   },
   "azoramoon": {
-    baseUrl: "https://azoramoon.com",
-    selectors: {
-      title: ".post-title h1, h1.entry-title",
-      cover: ".summary_image img",
-      description: ".manga-summary p, .summary__content p",
-      status: ".post-status, .summary-content",
-      genres: ".genres-content a",
-      author: ".manga-authors, .author-content",
-      artist: ".manga-artists, .artist-content",
-      chapters: "li.wp-manga-chapter",
-      chapterTitle: "a",
-      chapterUrl: "a",
-      chapterDate: ".chapter-release-date, .post-on",
-      pageImages: ".reading-content img, .page-break img, img.wp-manga-chapter-img"
-    }
+  baseUrl: "https://azoramoon.com",
+  selectors: {
+    title: ".post-title h1",
+    cover: ".summary_image img",
+    description: ".manga-summary p",
+    status: ".post-status",
+    genres: ".genres-content a",
+    author: ".manga-authors",
+    artist: ".manga-artists",
+    chapters: ".wp-manga-chapter a",      // جرب هذا بدل li
+    chapterTitle: "a",
+    chapterUrl: "a",
+    chapterDate: ".chapter-release-date",
+    pageImages: ".wp-manga-chapter-img"  // صور الفصل
+  }
+}
   },
   "dilar": {
     baseUrl: "https://dilar.tube",
