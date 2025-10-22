@@ -1,181 +1,180 @@
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { DOMParser } from "https://deno.land/x/deno_dom@v0.1.38/deno-dom-wasm.ts";
 
 const corsHeaders = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
 interface ScrapeMangaRequest {
-    url: string;
-    jobType: "manga_info" | "chapters" | "pages" | "catalog";
-    chapterId?: string;
-    source?: string;
-    limit?: number;
+  url: string;
+  jobType: "manga_info" | "chapters" | "pages" | "catalog";
+  chapterId?: string;
+  source?: string;
+  limit?: number;
 }
 
 // Advanced User-Agents with realistic browser fingerprints
 const USER_AGENTS = [
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
-    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-    'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:133.0) Gecko/20100101 Firefox/133.0',
-    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.2 Safari/605.1.15',
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0',
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:133.0) Gecko/20100101 Firefox/133.0',
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.2 Safari/605.1.15',
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0',
 ];
 
 // TLS Fingerprint simulation data
 const TLS_CIPHERS = [
-    'TLS_AES_128_GCM_SHA256',
-    'TLS_AES_256_GCM_SHA384',
-    'TLS_CHACHA20_POLY1305_SHA256',
-    'ECDHE-ECDSA-AES128-GCM-SHA256',
-    'ECDHE-RSA-AES128-GCM-SHA256',
+  'TLS_AES_128_GCM_SHA256',
+  'TLS_AES_256_GCM_SHA384',
+  'TLS_CHACHA20_POLY1305_SHA256',
+  'ECDHE-ECDSA-AES128-GCM-SHA256',
+  'ECDHE-RSA-AES128-GCM-SHA256',
 ];
 
 function getRandomUserAgent(): string {
-    return USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
+  return USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
 }
 
 function getRandomDelay(min: number, max: number): number {
-    return Math.floor(Math.random() * (max - min + 1)) + min;
+  return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
 function getBaseHeaders(): HeadersInit {
-    const ua = getRandomUserAgent();
-    const isChrome = ua.includes('Chrome') && !ua.includes('Edg');
-    const isFirefox = ua.includes('Firefox');
-    const isSafari = ua.includes('Safari') && !ua.includes('Chrome');
-    const isEdge = ua.includes('Edg');
+  const ua = getRandomUserAgent();
+  const isChrome = ua.includes('Chrome') && !ua.includes('Edg');
+  const isFirefox = ua.includes('Firefox');
+  const isSafari = ua.includes('Safari') && !ua.includes('Chrome');
+  const isEdge = ua.includes('Edg');
 
-    const headers: HeadersInit = {
-        'User-Agent': ua,
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-        'Accept-Language': 'ar-SA,ar;q=0.9,en-US;q=0.8,en;q=0.7',
-        'Accept-Encoding': 'gzip, deflate, br, zstd',
-        'Connection': 'keep-alive',
-        'Upgrade-Insecure-Requests': '1',
-        'Sec-Fetch-Dest': 'document',
-        'Sec-Fetch-Mode': 'navigate',
-        'Sec-Fetch-Site': 'none',
-        'Sec-Fetch-User': '?1',
-        'Cache-Control': 'max-age=0',
-        'DNT': '1',
-    };
+  const headers: HeadersInit = {
+    'User-Agent': ua,
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+    'Accept-Language': 'ar-SA,ar;q=0.9,en-US;q=0.8,en;q=0.7',
+    'Accept-Encoding': 'gzip, deflate, br, zstd',
+    'Connection': 'keep-alive',
+    'Upgrade-Insecure-Requests': '1',
+    'Sec-Fetch-Dest': 'document',
+    'Sec-Fetch-Mode': 'navigate',
+    'Sec-Fetch-Site': 'none',
+    'Sec-Fetch-User': '?1',
+    'Cache-Control': 'max-age=0',
+    'DNT': '1',
+  };
 
-    // Add browser-specific headers
-    if (isChrome || isEdge) {
-        headers['sec-ch-ua'] = '"Chromium";v="131", "Not_A Brand";v="24"';
-        headers['sec-ch-ua-mobile'] = '?0';
-        headers['sec-ch-ua-platform'] = '"Windows"';
-        headers['sec-ch-ua-platform-version'] = '"15.0.0"';
-    }
+  // Add browser-specific headers
+  if (isChrome || isEdge) {
+    headers['sec-ch-ua'] = '"Chromium";v="131", "Not_A Brand";v="24"';
+    headers['sec-ch-ua-mobile'] = '?0';
+    headers['sec-ch-ua-platform'] = '"Windows"';
+    headers['sec-ch-ua-platform-version'] = '"15.0.0"';
+  }
 
-    // Randomly add optional headers to look more realistic
-    if (Math.random() > 0.5) {
-        headers['Pragma'] = 'no-cache';
-    }
+  // Randomly add optional headers to look more realistic
+  if (Math.random() > 0.5) {
+    headers['Pragma'] = 'no-cache';
+  }
 
-    return headers;
+  return headers;
 }
 
 // Configuration for different sources
 const SCRAPER_CONFIGS: Record<string, {
-    baseUrl: string;
-    selectors: {
-        title: string;
-        cover: string;
-        description: string;
-        status: string;
-        genres: string;
-        author: string;
-        artist: string;
-        chapters: string;
-        chapterTitle: string;
-        chapterUrl: string;
-        chapterDate: string;
-        pageImages: string;
-        year?: string;
-        catalogMangaCard?: string;
-        catalogMangaLink?: string;
-        catalogMangaCover?: string;
-    };
+  baseUrl: string;
+  selectors: {
+    title: string;
+    cover: string;
+    description: string;
+    status: string;
+    genres: string;
+    author: string;
+    artist: string;
+    chapters: string;
+    chapterTitle: string;
+    chapterUrl: string;
+    chapterDate: string;
+    pageImages: string;
+    year?: string;
+    catalogMangaCard?: string;
+    catalogMangaLink?: string;
+    catalogMangaCover?: string;
+  };
 }> = {
-    "lekmanga": {
-        baseUrl: "https://lekmanga.net",
-        selectors: {
-            title: "h1.entry-title, .post-title, h1.manga-title",
-            cover: ".summary_image img, img.wp-post-image, .manga-cover img",
-            description: ".summary__content, .description-summary .summary__content, .manga-excerpt",
-            status: ".post-status .summary-content, .manga-status",
-            genres: ".genres-content a, .manga-genres a",
-            author: ".author-content, .manga-author",
-            artist: ".artist-content, .manga-artist",
-            chapters: "li.wp-manga-chapter, .chapter-item",
-            chapterTitle: "a",
-            chapterUrl: "a",
-            chapterDate: ".chapter-release-date",
-            pageImages: ".reading-content img, img.wp-manga-chapter-img, .page-break img"
-        }
-    },
-    "azoramoon": {
-        baseUrl: "https://azoramoon.com",
-        selectors: {
-            title: ".post-title h1, h1.entry-title",
-            cover: ".summary_image img",
-            description: ".manga-summary p, .summary__content p",
-            status: ".post-status, .summary-content",
-            genres: ".genres-content a",
-            author: ".manga-authors, .author-content",
-            artist: ".manga-artists, .artist-content",
-            chapters: "li.wp-manga-chapter",
-            chapterTitle: "a",
-            chapterUrl: "a",
-            chapterDate: ".chapter-release-date, .post-on",
-            pageImages: ".reading-content img, .page-break img, img.wp-manga-chapter-img"
-        }
-    },
-    "dilar": {
-        baseUrl: "https://dilar.tube",
-        selectors: {
-            title: "h1.manga-title, .title",
-            cover: ".manga-cover img, .cover img",
-            description: ".manga-description, .description",
-            status: ".manga-status, .status",
-            genres: ".genres a, .tags a",
-            author: ".author",
-            artist: ".artist",
-            chapters: ".chapter-item, .chapters li",
-            chapterTitle: "a, .chapter-title",
-            chapterUrl: "a",
-            chapterDate: ".chapter-date, .date",
-            pageImages: ".manga-page img, .page img"
-        }
-    },
-    "onma": {
-        baseUrl: "https://www.onma.top",
-        selectors: {
-            title: ".panel-heading",
-            cover: "img.img-responsive",
-            description: ".well p",
-            status: ".label",
-            genres: "h3:has-text('التصنيفات') .text a",
-            author: "h3:has-text('المؤلف') .text a",
-            artist: "h3:has-text('الرسام') .text a",
-            chapters: "ul.chapters li",
-            chapterTitle: ".chapter-title-rtl a",
-            chapterUrl: ".chapter-title-rtl a",
-            chapterDate: ".date-chapter-title-rtl",
-            pageImages: ".img-responsive, .chapter-img",
-            year: "h3:has-text('تاريخ الإصدار') .text",
-            catalogMangaCard: ".photo",
-            catalogMangaLink: ".manga-name a",
-            catalogMangaCover: ".thumbnail img"
-        }
+  "lekmanga": {
+    baseUrl: "https://lekmanga.net",
+    selectors: {
+      title: "h1.entry-title, .post-title, h1.manga-title",
+      cover: ".summary_image img, img.wp-post-image, .manga-cover img",
+      description: ".summary__content, .description-summary .summary__content, .manga-excerpt",
+      status: ".post-status .summary-content, .manga-status",
+      genres: ".genres-content a, .manga-genres a",
+      author: ".author-content, .manga-author",
+      artist: ".artist-content, .manga-artist",
+      chapters: "li.wp-manga-chapter, .chapter-item",
+      chapterTitle: "a",
+      chapterUrl: "a",
+      chapterDate: ".chapter-release-date",
+      pageImages: ".reading-content img, img.wp-manga-chapter-img, .page-break img"
     }
+  },
+  "azoramoon": {
+    baseUrl: "https://azoramoon.com",
+    selectors: {
+      title: ".post-title h1, h1.entry-title",
+      cover: ".summary_image img",
+      description: ".manga-summary p, .summary__content p",
+      status: ".post-status, .summary-content",
+      genres: ".genres-content a",
+      author: ".manga-authors, .author-content",
+      artist: ".manga-artists, .artist-content",
+      chapters: "li.wp-manga-chapter",
+      chapterTitle: "a",
+      chapterUrl: "a",
+      chapterDate: ".chapter-release-date, .post-on",
+      pageImages: ".reading-content img, .page-break img, img.wp-manga-chapter-img"
+    }
+  },
+  "dilar": {
+    baseUrl: "https://dilar.tube",
+    selectors: {
+      title: "h1.manga-title, .title",
+      cover: ".manga-cover img, .cover img",
+      description: ".manga-description, .description",
+      status: ".manga-status, .status",
+      genres: ".genres a, .tags a",
+      author: ".author",
+      artist: ".artist",
+      chapters: ".chapter-item, .chapters li",
+      chapterTitle: "a, .chapter-title",
+      chapterUrl: "a",
+      chapterDate: ".chapter-date, .date",
+      pageImages: ".manga-page img, .page img"
+    }
+  },
+  "onma": {
+    baseUrl: "https://www.onma.top",
+    selectors: {
+      title: ".panel-heading",
+      cover: "img.img-responsive",
+      description: ".well p",
+      status: ".label",
+      genres: "h3:has-text('التصنيفات') .text a",
+      author: "h3:has-text('المؤلف') .text a",
+      artist: "h3:has-text('الرسام') .text a",
+      chapters: "ul.chapters li",
+      chapterTitle: ".chapter-title-rtl a",
+      chapterUrl: ".chapter-title-rtl a",
+      chapterDate: ".date-chapter-title-rtl",
+      pageImages: ".img-responsive, .chapter-img",
+      year: "h3:has-text('تاريخ الإصدار') .text",
+      catalogMangaCard: ".photo",
+      catalogMangaLink: ".manga-name a",
+      catalogMangaCover: ".thumbnail img"
+    }
+  }
 };
 
 // Retry configuration with exponential backoff
@@ -183,624 +182,650 @@ const MAX_RETRIES = 5;
 const BASE_DELAY = 3000;
 
 async function delay(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 // Simulate human-like delays
 async function humanDelay(): Promise<void> {
-    const baseDelay = getRandomDelay(2000, 5000);
-    const jitter = getRandomDelay(-500, 500);
-    await delay(baseDelay + jitter);
+  const baseDelay = getRandomDelay(2000, 5000);
+  const jitter = getRandomDelay(-500, 500);
+  await delay(baseDelay + jitter);
 }
 
 async function fetchWithRetry(url: string, config: typeof SCRAPER_CONFIGS['lekmanga'], retryCount = 0): Promise<string> {
-    try {
-        console.log(`Fetching ${url} (attempt ${retryCount + 1}/${MAX_RETRIES + 1})`);
+  try {
+    console.log(`Fetching ${url} (attempt ${retryCount + 1}/${MAX_RETRIES + 1})`);
+    
+    // Human-like delay before each request
+    await humanDelay();
+    
+    const headers = getBaseHeaders();
+    
+    // Add specific headers for the request
+    const requestHeaders: HeadersInit = {
+      ...headers,
+      'Referer': retryCount > 0 ? config.baseUrl : url,
+      'Origin': config.baseUrl,
+    };
 
-        // Human-like delay before each request
-        await humanDelay();
-
-        const headers = getBaseHeaders();
-
-        // Add specific headers for the request
-        const requestHeaders: HeadersInit = {
-            ...headers,
-            'Referer': retryCount > 0 ? config.baseUrl : url,
-            'Origin': config.baseUrl,
-        };
-
-        // On retry, add cookies from previous attempts
-        if (retryCount > 0) {
-            requestHeaders['Cookie'] = '__cf_bm=dummy; cf_clearance=dummy';
-        }
-
-        console.log(`Using User-Agent: ${requestHeaders['User-Agent']}`);
-
-        const response = await fetch(url, {
-            method: 'GET',
-            headers: requestHeaders,
-            redirect: 'follow',
-        });
-
-        console.log(`Response status: ${response.status}`);
-
-        // Store cookies from response
-        const setCookie = response.headers.get('set-cookie');
-        if (setCookie) {
-            console.log('Received cookies from server');
-        }
-
-        if (!response.ok) {
-            if (response.status === 403) {
-                throw new Error(`Cloudflare challenge detected (403) - Need browser verification`);
-            }
-            if (response.status === 503) {
-                throw new Error(`Service unavailable (503) - Rate limited or maintenance`);
-            }
-            if (response.status === 429) {
-                throw new Error(`Too many requests (429) - Rate limited`);
-            }
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
-
-        const html = await response.text();
-
-        // Check for Cloudflare challenge patterns
-        const cloudflarePatterns = [
-            'challenge-platform',
-            'cf-browser-verification',
-            'cf_challenge_response',
-            'cf-chl-bypass',
-            '__cf_chl_',
-            'ray_id',
-            'cf-error-details',
-        ];
-
-        const hasCloudflareChallenge = cloudflarePatterns.some(pattern =>
-            html.toLowerCase().includes(pattern.toLowerCase())
-        );
-
-        if (hasCloudflareChallenge) {
-            throw new Error('Cloudflare challenge page detected in response');
-        }
-
-        // Check if we got actual content
-        if (html.length < 500) {
-            throw new Error('Response too short - likely blocked');
-        }
-
-        console.log(`Successfully fetched ${html.length} bytes`);
-        return html;
-    } catch (error) {
-        console.error(`Fetch error (attempt ${retryCount + 1}):`, error);
-
-        if (retryCount < MAX_RETRIES) {
-            // Exponential backoff with jitter
-            const exponentialDelay = BASE_DELAY * Math.pow(2, retryCount);
-            const jitter = getRandomDelay(-1000, 1000);
-            const delayMs = exponentialDelay + jitter;
-
-            console.log(`Retrying after ${delayMs}ms...`);
-            await delay(delayMs);
-            return fetchWithRetry(url, config, retryCount + 1);
-        }
-
-        throw error;
+    // On retry, add cookies from previous attempts
+    if (retryCount > 0) {
+      requestHeaders['Cookie'] = '__cf_bm=dummy; cf_clearance=dummy';
     }
+
+    console.log(`Using User-Agent: ${requestHeaders['User-Agent']}`);
+    
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: requestHeaders,
+      redirect: 'follow',
+    });
+
+    console.log(`Response status: ${response.status}`);
+    
+    // Store cookies from response
+    const setCookie = response.headers.get('set-cookie');
+    if (setCookie) {
+      console.log('Received cookies from server');
+    }
+    
+    if (!response.ok) {
+      if (response.status === 403) {
+        throw new Error(`Cloudflare challenge detected (403) - Need browser verification`);
+      }
+      if (response.status === 503) {
+        throw new Error(`Service unavailable (503) - Rate limited or maintenance`);
+      }
+      if (response.status === 429) {
+        throw new Error(`Too many requests (429) - Rate limited`);
+      }
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    const html = await response.text();
+    
+    // Check for Cloudflare challenge patterns
+    const cloudflarePatterns = [
+      'challenge-platform',
+      'cf-browser-verification',
+      'cf_challenge_response',
+      'cf-chl-bypass',
+      '__cf_chl_',
+      'ray_id',
+      'cf-error-details',
+    ];
+    
+    const hasCloudflareChallenge = cloudflarePatterns.some(pattern => 
+      html.toLowerCase().includes(pattern.toLowerCase())
+    );
+    
+    if (hasCloudflareChallenge) {
+      throw new Error('Cloudflare challenge page detected in response');
+    }
+    
+    // Check if we got actual content
+    if (html.length < 500) {
+      throw new Error('Response too short - likely blocked');
+    }
+    
+    console.log(`Successfully fetched ${html.length} bytes`);
+    return html;
+  } catch (error) {
+    console.error(`Fetch error (attempt ${retryCount + 1}):`, error);
+    
+    if (retryCount < MAX_RETRIES) {
+      // Exponential backoff with jitter
+      const exponentialDelay = BASE_DELAY * Math.pow(2, retryCount);
+      const jitter = getRandomDelay(-1000, 1000);
+      const delayMs = exponentialDelay + jitter;
+      
+      console.log(`Retrying after ${delayMs}ms...`);
+      await delay(delayMs);
+      return fetchWithRetry(url, config, retryCount + 1);
+    }
+    
+    throw error;
+  }
 }
 
 function extractSlug(url: string): string {
-    const match = url.match(/\/manga\/([^\/]+)/);
-    return match ? match[1] : '';
+  const match = url.match(/\/manga\/([^\/]+)/);
+  return match ? match[1] : '';
 }
 
 function tryMultipleSelectors(doc: any, selectors: string): string | null {
-    const selectorList = selectors.split(',').map(s => s.trim());
-    for (const selector of selectorList) {
-        try {
-            // Handle special :has-text() selector
-            if (selector.includes(':has-text(')) {
-                const match = selector.match(/:has-text\(['"]([^'"]+)['"]\)/);
-                if (match) {
-                    const searchText = match[1];
-                    const baseSelector = selector.split(':has-text(')[0].trim();
-                    const elements = doc.querySelectorAll(baseSelector);
-                    for (const el of elements) {
-                        if (el.textContent?.includes(searchText)) {
-                            const targetSelector = selector.split(') ')[1];
-                            if (targetSelector) {
-                                const targetEl = el.querySelector(targetSelector);
-                                if (targetEl) return targetEl.textContent?.trim() || null;
-                            }
-                            return el.textContent?.trim() || null;
-                        }
-                    }
-                }
-            } else {
-                const element = doc.querySelector(selector);
-                if (element) {
-                    return element.textContent?.trim() || null;
-                }
+  const selectorList = selectors.split(',').map(s => s.trim());
+  for (const selector of selectorList) {
+    try {
+      // Handle special :has-text() selector
+      if (selector.includes(':has-text(')) {
+        const match = selector.match(/:has-text\(['"]([^'"]+)['"]\)/);
+        if (match) {
+          const searchText = match[1];
+          const baseSelector = selector.split(':has-text(')[0].trim();
+          const elements = doc.querySelectorAll(baseSelector);
+          for (const el of elements) {
+            if (el.textContent?.includes(searchText)) {
+              const targetSelector = selector.split(') ')[1];
+              if (targetSelector) {
+                const targetEl = el.querySelector(targetSelector);
+                if (targetEl) return targetEl.textContent?.trim() || null;
+              }
+              return el.textContent?.trim() || null;
             }
-        } catch (e) {
-            console.log(`Selector ${selector} failed, trying next...`);
+          }
         }
+      } else {
+        const element = doc.querySelector(selector);
+        if (element) {
+          return element.textContent?.trim() || null;
+        }
+      }
+    } catch (e) {
+      console.log(`Selector ${selector} failed, trying next...`);
     }
-    return null;
+  }
+  return null;
 }
 
 function tryMultipleSelectorsForAttr(doc: any, selectors: string, attr: string): string | null {
-    const selectorList = selectors.split(',').map(s => s.trim());
-    for (const selector of selectorList) {
-        try {
-            const element = doc.querySelector(selector);
-            if (element) {
-                return element.getAttribute(attr) || null;
-            }
-        } catch (e) {
-            console.log(`Selector ${selector} failed, trying next...`);
-        }
+  const selectorList = selectors.split(',').map(s => s.trim());
+  for (const selector of selectorList) {
+    try {
+      const element = doc.querySelector(selector);
+      if (element) {
+        return element.getAttribute(attr) || null;
+      }
+    } catch (e) {
+      console.log(`Selector ${selector} failed, trying next...`);
     }
-    return null;
+  }
+  return null;
 }
 
 async function scrapeMangaInfo(url: string, source = "lekmanga") {
-    console.log(`Scraping manga info from ${source}:`, url);
+  console.log(`Scraping manga info from ${source}:`, url);
+  
+  const config = SCRAPER_CONFIGS[source];
+  if (!config) {
+    throw new Error(`Unknown source: ${source}`);
+  }
 
-    const config = SCRAPER_CONFIGS[source];
-    if (!config) {
-        throw new Error(`Unknown source: ${source}`);
+  const html = await fetchWithRetry(url, config);
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  
+  if (!doc) {
+    throw new Error('Failed to parse HTML');
+  }
+
+  // Extract data using flexible selectors
+  let title = tryMultipleSelectors(doc, config.selectors.title) || '';
+  let cover = tryMultipleSelectorsForAttr(doc, config.selectors.cover, 'src') || 
+              tryMultipleSelectorsForAttr(doc, config.selectors.cover, 'data-src') || '';
+  
+  // Make sure cover URL is absolute
+  if (cover && !cover.startsWith('http')) {
+    cover = cover.startsWith('//') ? 'https:' + cover : config.baseUrl + cover;
+  }
+  
+  const description = tryMultipleSelectors(doc, config.selectors.description) || '';
+  const statusRaw = tryMultipleSelectors(doc, config.selectors.status) || 'ongoing';
+  const author = tryMultipleSelectors(doc, config.selectors.author) || '';
+  const artist = tryMultipleSelectors(doc, config.selectors.artist) || '';
+  
+  // Extract year if available
+  let year = null;
+  if (config.selectors.year) {
+    const yearText = tryMultipleSelectors(doc, config.selectors.year);
+    if (yearText) {
+      const yearMatch = yearText.match(/\d{4}/);
+      if (yearMatch) year = parseInt(yearMatch[0]);
     }
+  }
 
-    try {
-        const html = await fetchWithRetry(url, config);
-        const doc = new DOMParser().parseFromString(html, 'text/html');
-
-        if (!doc) {
-            throw new Error('Failed to parse HTML');
+  // Extract genres
+  const genres: string[] = [];
+  try {
+    // Special handling for onma.top genre selector
+    if (source === 'onma') {
+      const h3Elements = doc.querySelectorAll('h3');
+      for (const h3 of h3Elements) {
+        if (h3.textContent?.includes('التصنيفات')) {
+          const genreLinks = (h3 as any).querySelectorAll('.text a');
+          genreLinks.forEach((link: any) => {
+            const genre = link.textContent?.trim();
+            if (genre) genres.push(genre);
+          });
+          break;
         }
-
-        // Extract data using flexible selectors
-        let title = tryMultipleSelectors(doc, config.selectors.title) || '';
-        let cover = tryMultipleSelectorsForAttr(doc, config.selectors.cover, 'src') ||
-            tryMultipleSelectorsForAttr(doc, config.selectors.cover, 'data-src') || '';
-
-        // Make sure cover URL is absolute
-        if (cover && !cover.startsWith('http')) {
-            cover = cover.startsWith('//') ? 'https:' + cover : config.baseUrl + cover;
-        }
-
-        const description = tryMultipleSelectors(doc, config.selectors.description) || '';
-        const statusRaw = tryMultipleSelectors(doc, config.selectors.status) || 'ongoing';
-        const author = tryMultipleSelectors(doc, config.selectors.author) || '';
-        const artist = tryMultipleSelectors(doc, config.selectors.artist) || '';
-
-        // Extract year if available
-        let year = null;
-        if (config.selectors.year) {
-            const yearText = tryMultipleSelectors(doc, config.selectors.year);
-            if (yearText) {
-                const yearMatch = yearText.match(/\d{4}/);
-                if (yearMatch) year = parseInt(yearMatch[0]);
-            }
-        }
-
-        // Extract genres
-        const genres: string[] = [];
-        try {
-            // Special handling for onma.top genre selector
-            if (source === 'onma') {
-                const h3Elements = doc.querySelectorAll('h3');
-                for (const h3 of h3Elements) {
-                    if (h3.textContent?.includes('التصنيفات')) {
-                        const genreLinks = (h3 as any).querySelectorAll('.text a');
-                        genreLinks.forEach((link: any) => {
-                            const genre = link.textContent?.trim();
-                            if (genre) genres.push(genre);
-                        });
-                        break;
-                    }
-                }
-            } else {
-                const genreElements = doc.querySelectorAll(config.selectors.genres);
-                genreElements.forEach((el: any) => {
-                    const genre = el.textContent?.trim();
-                    if (genre) genres.push(genre);
-                });
-            }
-        } catch (e) {
-            console.log('Failed to extract genres:', e);
-        }
-
-        const slug = extractSlug(url);
-
-        const mangaData = {
-            title,
-            slug,
-            description,
-            cover_url: cover,
-            status: statusRaw.toLowerCase().includes('ongoing') || statusRaw.toLowerCase().includes('مستمر') ? 'ongoing' : 'completed',
-            genres: genres.length > 0 ? genres : null,
-            author: author || null,
-            artist: artist || null,
-            year,
-            source_url: url,
-            source,
-        };
-
-        // Validate manga data
-        if (!mangaData.title || !mangaData.cover_url) {
-            console.error(`Manga data is incomplete for ${url}. Skipping.`);
-            return null; // Or throw an error if you prefer
-        }
-
-        console.log("Extracted manga data:", mangaData);
-        return mangaData;
-    } catch (error) {
-        console.error(`Error scraping manga info from ${url}:`, error);
-        return null; // Or throw an error if you prefer
+      }
+    } else {
+      const genreElements = doc.querySelectorAll(config.selectors.genres);
+      genreElements.forEach((el: any) => {
+        const genre = el.textContent?.trim();
+        if (genre) genres.push(genre);
+      });
     }
+  } catch (e) {
+    console.log('Failed to extract genres:', e);
+  }
+
+  const slug = extractSlug(url);
+
+  const mangaData = {
+    title,
+    slug,
+    description,
+    cover_url: cover,
+    status: statusRaw.toLowerCase().includes('ongoing') || statusRaw.toLowerCase().includes('مستمر') ? 'ongoing' : 'completed',
+    genres: genres.length > 0 ? genres : null,
+    author: author || null,
+    artist: artist || null,
+    year,
+    source_url: url,
+    source,
+  };
+
+  console.log("Extracted manga data:", mangaData);
+  return mangaData;
 }
 
 async function scrapeChapters(mangaUrl: string, source = "lekmanga") {
-    console.log(`Scraping chapters from ${source}:`, mangaUrl);
+  console.log(`Scraping chapters from ${source}:`, mangaUrl);
+  
+  const config = SCRAPER_CONFIGS[source];
+  if (!config) {
+    throw new Error(`Unknown source: ${source}`);
+  }
 
-    const config = SCRAPER_CONFIGS[source];
-    if (!config) {
-        throw new Error(`Unknown source: ${source}`);
-    }
+  const html = await fetchWithRetry(mangaUrl, config);
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  
+  if (!doc) {
+    throw new Error('Failed to parse HTML');
+  }
 
-    try {
-        const html = await fetchWithRetry(mangaUrl, config);
-        const doc = new DOMParser().parseFromString(html, 'text/html');
+  const chapters: any[] = [];
+  
+  try {
+    const chapterElements = doc.querySelectorAll(config.selectors.chapters);
+    console.log(`Found ${chapterElements.length} chapter elements`);
 
-        if (!doc) {
-            throw new Error('Failed to parse HTML');
+    chapterElements.forEach((chapterEl: any, index: number) => {
+      try {
+        const linkEl = chapterEl.querySelector(config.selectors.chapterUrl);
+        const titleEl = chapterEl.querySelector(config.selectors.chapterTitle);
+        const dateEl = chapterEl.querySelector(config.selectors.chapterDate);
+
+        const chapterUrl = linkEl?.getAttribute('href') || '';
+        let title = titleEl?.textContent?.trim() || '';
+        const dateText = dateEl?.textContent?.trim() || '';
+
+        // Extract chapter number from title or URL
+        let chapterNumber = 0;
+        const chapterMatch = title.match(/(\d+\.?\d*)/);
+        if (chapterMatch) {
+          chapterNumber = parseFloat(chapterMatch[1]);
+        } else {
+          // Try to extract from URL
+          const urlMatch = chapterUrl.match(/chapter[_-](\d+\.?\d*)/i);
+          if (urlMatch) {
+            chapterNumber = parseFloat(urlMatch[1]);
+          } else {
+            // Use reverse index as fallback
+            chapterNumber = chapterElements.length - index;
+          }
         }
 
-        const chapters: any[] = [];
-
-        try {
-            const chapterElements = doc.querySelectorAll(config.selectors.chapters);
-            console.log(`Found ${chapterElements.length} chapter elements`);
-
-            chapterElements.forEach((chapterEl: any, index: number) => {
-                try {
-                    const linkEl = chapterEl.querySelector(config.selectors.chapterUrl);
-                    const titleEl = chapterEl.querySelector(config.selectors.chapterTitle);
-                    const dateEl = chapterEl.querySelector(config.selectors.chapterDate);
-
-                    const chapterUrl = linkEl?.getAttribute('href') || '';
-                    let title = titleEl?.textContent?.trim() || '';
-                    const dateText = dateEl?.textContent?.trim() || '';
-
-                    // Extract chapter number from title or URL
-                    let chapterNumber = 0;
-                    const chapterMatch = title.match(/(\d+\.?\d*)/);
-                    if (chapterMatch) {
-                        chapterNumber = parseFloat(chapterMatch[1]);
-                    } else {
-                        // Try to extract from URL
-                        const urlMatch = chapterUrl.match(/chapter[_-](\d+\.?\d*)/i);
-                        if (urlMatch) {
-                            chapterNumber = parseFloat(urlMatch[1]);
-                        } else {
-                            // Use reverse index as fallback
-                            chapterNumber = chapterElements.length - index;
-                        }
-                    }
-
-                    if (chapterUrl) {
-                        chapters.push({
-                            chapter_number: chapterNumber,
-                            title: title || `Chapter ${chapterNumber}`,
-                            source_url: chapterUrl.startsWith('http') ? chapterUrl : `${config.baseUrl}${chapterUrl}`,
-                            release_date: dateText || null,
-                        });
-                    }
-                } catch (e) {
-                    console.error(`Error processing chapter ${index}:`, e);
-                }
-            });
-        } catch (e) {
-            console.error('Error extracting chapters:', e);
-            throw e;
+        if (chapterUrl) {
+          chapters.push({
+            chapter_number: chapterNumber,
+            title: title || `Chapter ${chapterNumber}`,
+            source_url: chapterUrl.startsWith('http') ? chapterUrl : `${config.baseUrl}${chapterUrl}`,
+            release_date: dateText || null,
+          });
         }
+      } catch (e) {
+        console.error(`Error processing chapter ${index}:`, e);
+      }
+    });
+  } catch (e) {
+    console.error('Error extracting chapters:', e);
+    throw e;
+  }
 
-        console.log(`Extracted ${chapters.length} chapters`);
-        return chapters;
-    } catch (error) {
-        console.error(`Error scraping chapters from ${mangaUrl}:`, error);
-        return []; // Or throw an error if you prefer
-    }
+  console.log(`Extracted ${chapters.length} chapters`);
+  return chapters;
 }
 
 async function scrapeChapterPages(chapterUrl: string, source = "lekmanga") {
-    console.log(`Scraping pages from ${source} chapter:`, chapterUrl);
+  console.log(`Scraping pages from ${source} chapter:`, chapterUrl);
+  
+  const config = SCRAPER_CONFIGS[source];
+  if (!config) {
+    throw new Error(`Unknown source: ${source}`);
+  }
 
-    const config = SCRAPER_CONFIGS[source];
-    if (!config) {
-        throw new Error(`Unknown source: ${source}`);
-    }
+  const html = await fetchWithRetry(chapterUrl, config);
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  
+  if (!doc) {
+    throw new Error('Failed to parse HTML');
+  }
 
-    try {
-        const html = await fetchWithRetry(chapterUrl, config);
-        const doc = new DOMParser().parseFromString(html, 'text/html');
+  const pages: any[] = [];
+  
+  try {
+    const imageElements = doc.querySelectorAll(config.selectors.pageImages);
+    console.log(`Found ${imageElements.length} image elements`);
 
-        if (!doc) {
-            throw new Error('Failed to parse HTML');
+    imageElements.forEach((img: any, index: number) => {
+      try {
+        let imageUrl = img.getAttribute('src') || 
+                      img.getAttribute('data-src') || 
+                      img.getAttribute('data-lazy-src') || '';
+        
+        if (imageUrl && !imageUrl.includes('loading') && !imageUrl.includes('placeholder')) {
+          // Clean up image URL
+          if (imageUrl.startsWith('//')) {
+            imageUrl = 'https:' + imageUrl;
+          } else if (!imageUrl.startsWith('http')) {
+            imageUrl = config.baseUrl + imageUrl;
+          }
+          
+          pages.push({
+            page_number: index + 1,
+            image_url: imageUrl
+          });
         }
+      } catch (e) {
+        console.error(`Error processing image ${index}:`, e);
+      }
+    });
+  } catch (e) {
+    console.error('Error extracting pages:', e);
+    throw e;
+  }
 
-        const pages: any[] = [];
-
-        try {
-            const imageElements = doc.querySelectorAll(config.selectors.pageImages);
-            console.log(`Found ${imageElements.length} image elements`);
-
-            imageElements.forEach((img: any, index: number) => {
-                try {
-                    let imageUrl = img.getAttribute('src') ||
-                        img.getAttribute('data-src') ||
-                        img.getAttribute('data-lazy-src') || '';
-
-                    if (imageUrl && !imageUrl.includes('loading') && !imageUrl.includes('placeholder')) {
-                        // Clean up image URL
-                        if (imageUrl.startsWith('//')) {
-                            imageUrl = 'https:' + imageUrl;
-                        } else if (!imageUrl.startsWith('http')) {
-                            imageUrl = config.baseUrl + imageUrl;
-                        }
-
-                        pages.push({
-                            page_number: index + 1,
-                            image_url: imageUrl
-                        });
-                    }
-                } catch (e) {
-                    console.error(`Error processing image ${index}:`, e);
-                }
-            });
-        } catch (e) {
-            console.error('Error extracting pages:', e);
-            throw e;
-        }
-
-        console.log(`Extracted ${pages.length} pages`);
-        return pages;
-    } catch (error) {
-        console.error(`Error scraping chapter pages from ${chapterUrl}:`, error);
-        return []; // Or throw an error if you prefer
-    }
+  console.log(`Extracted ${pages.length} pages`);
+  return pages;
 }
 
 async function scrapeCatalog(source = "onma", limit = 20) {
-    console.log(`Scraping catalog from ${source}, limit: ${limit}`);
+  console.log(`Scraping catalog from ${source}, limit: ${limit}`);
+  
+  const config = SCRAPER_CONFIGS[source];
+  if (!config) {
+    throw new Error(`Unknown source: ${source}`);
+  }
 
-    const config = SCRAPER_CONFIGS[source];
-    if (!config) {
-        throw new Error(`Unknown source: ${source}`);
-    }
+  const html = await fetchWithRetry(config.baseUrl, config);
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  
+  if (!doc) {
+    throw new Error('Failed to parse HTML');
+  }
 
-    try {
-        const html = await fetchWithRetry(config.baseUrl, config);
-        const doc = new DOMParser().parseFromString(html, 'text/html');
-
-        if (!doc) {
-            throw new Error('Failed to parse HTML');
+  const mangaList: any[] = [];
+  
+  try {
+    const mangaCards = doc.querySelectorAll(config.selectors.catalogMangaCard || '.manga-item');
+    console.log(`Found ${mangaCards.length} manga cards in catalog`);
+    
+    let count = 0;
+    for (const card of mangaCards) {
+      if (count >= limit) break;
+      
+      try {
+        const linkEl = (card as any).querySelector(config.selectors.catalogMangaLink || 'a');
+        const mangaUrl = linkEl?.getAttribute('href');
+        
+        if (mangaUrl) {
+          const fullUrl = mangaUrl.startsWith('http') ? mangaUrl : config.baseUrl + mangaUrl;
+          mangaList.push({ url: fullUrl });
+          count++;
         }
-
-        const mangaList: any[] = [];
-
-        try {
-            const mangaCards = doc.querySelectorAll(config.selectors.catalogMangaCard || '.manga-item');
-            console.log(`Found ${mangaCards.length} manga cards in catalog`);
-
-            let count = 0;
-            for (const card of mangaCards) {
-                if (count >= limit) break;
-
-                try {
-                    const linkEl = (card as any).querySelector(config.selectors.catalogMangaLink || 'a');
-                    const mangaUrl = linkEl?.getAttribute('href');
-
-                    if (mangaUrl) {
-                        const fullUrl = mangaUrl.startsWith('http') ? mangaUrl : config.baseUrl + mangaUrl;
-                        mangaList.push({ url: fullUrl });
-                        count++;
-                    }
-                } catch (e) {
-                    console.error('Error processing manga card:', e);
-                }
-            }
-        } catch (e) {
-            console.error('Error extracting catalog:', e);
-            throw e;
-        }
-
-        console.log(`Extracted ${mangaList.length} manga URLs from catalog`);
-        return mangaList;
-    } catch (error) {
-        console.error(`Error scraping catalog from ${source}:`, error);
-        return []; // Or throw an error if you prefer
+      } catch (e) {
+        console.error('Error processing manga card:', e);
+      }
     }
+  } catch (e) {
+    console.error('Error extracting catalog:', e);
+    throw e;
+  }
+
+  console.log(`Extracted ${mangaList.length} manga URLs from catalog`);
+  return mangaList;
 }
 
 serve(async (req) => {
-    if (req.method === 'OPTIONS') {
-        return new Response(null, { headers: corsHeaders });
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseKey);
+
+    const { url, jobType, chapterId, source = "lekmanga", limit = 20 } = await req.json() as ScrapeMangaRequest;
+    
+    // Validate source
+    if (!SCRAPER_CONFIGS[source]) {
+      throw new Error(`Unsupported source: ${source}. Available sources: ${Object.keys(SCRAPER_CONFIGS).join(', ')}`);
     }
 
+    console.log(`Starting ${jobType} job for ${source}: ${url || chapterId}`);
+
+    // Create job record
+    const { data: job, error: jobError } = await supabase
+      .from('scrape_jobs')
+      .insert({
+        source_url: url || 'pages_job',
+        status: 'processing',
+        job_type: jobType,
+      })
+      .select()
+      .single();
+
+    if (jobError) {
+      console.error('Error creating job:', jobError);
+      throw jobError;
+    }
+
+    const jobId = job.id;
+    let result: any;
+
     try {
-        const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-        const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-        const supabase = createClient(supabaseUrl, supabaseKey);
+      if (jobType === "manga_info") {
+        const mangaData = await scrapeMangaInfo(url, source);
+        
+        const { data: manga, error: mangaError } = await supabase
+          .from('manga')
+          .upsert({
+            ...mangaData,
+            last_scraped_at: new Date().toISOString(),
+          }, {
+            onConflict: 'slug',
+          })
+          .select()
+          .single();
 
-        const { url, jobType, chapterId, source = "lekmanga", limit = 20 } = await req.json() as ScrapeMangaRequest;
+        if (mangaError) throw mangaError;
+        result = manga;
 
-        // Validate source
-        if (!SCRAPER_CONFIGS[source]) {
-            throw new Error(`Unsupported source: ${source}. Available sources: ${Object.keys(SCRAPER_CONFIGS).join(', ')}`);
-        }
+        await supabase
+          .from('scrape_jobs')
+          .update({ manga_id: manga.id, status: 'completed' })
+          .eq('id', jobId);
 
-        console.log(`Starting ${jobType} job for ${source}: ${url || chapterId}`);
+      } else if (jobType === "chapters") {
+        const chapters = await scrapeChapters(url, source);
+        const slug = extractSlug(url);
+        
+        const { data: manga } = await supabase
+          .from('manga')
+          .select('id')
+          .eq('slug', slug)
+          .single();
 
-        // Create job record
-        const { data: job, error: jobError } = await supabase
-            .from('scrape_jobs')
-            .insert({
-                source_url: url || 'pages_job',
-                status: 'processing',
-                job_type: jobType,
-            })
-            .select()
-            .single();
+        if (!manga) throw new Error('Manga not found. Please scrape manga info first.');
 
-        if (jobError) {
-            console.error('Error creating job:', jobError);
-            throw jobError;
-        }
+        const chaptersData = chapters.map(ch => ({
+          ...ch,
+          manga_id: manga.id,
+        }));
 
-        const jobId = job.id;
-        let result: any;
+        const { data: insertedChapters, error: chaptersError } = await supabase
+          .from('chapters')
+          .upsert(chaptersData, {
+            onConflict: 'manga_id,chapter_number',
+          })
+          .select();
 
-        try {
-            if (jobType === "manga_info") {
-                const mangaData = await scrapeMangaInfo(url, source);
+        if (chaptersError) throw chaptersError;
+        result = insertedChapters;
 
-                // Check if mangaData is valid before proceeding
-                if (mangaData) {
-                    const { data: manga, error: mangaError } = await supabase
-                        .from('manga')
-                        .upsert({
-                            ...mangaData,
-                            last_scraped_at: new Date().toISOString(),
-                        }, {
-                            onConflict: 'slug',
-                        })
-                        .select()
-                        .single();
+        await supabase
+          .from('scrape_jobs')
+          .update({ manga_id: manga.id, status: 'completed' })
+          .eq('id', jobId);
 
-                    if (mangaError) throw mangaError;
-                    result = manga;
+      } else if (jobType === "catalog") {
+        const catalogManga = await scrapeCatalog(source, limit);
+        console.log(`Scraping ${catalogManga.length} manga from catalog...`);
+        
+        const scrapedManga: any[] = [];
+        
+        for (const item of catalogManga) {
+          try {
+            // Scrape manga info
+            const mangaData = await scrapeMangaInfo(item.url, source);
+            
+            const { data: manga, error: mangaError } = await supabase
+              .from('manga')
+              .upsert({
+                ...mangaData,
+                last_scraped_at: new Date().toISOString(),
+              }, {
+                onConflict: 'slug',
+              })
+              .select()
+              .single();
 
-                    await supabase
-                        .from('scrape_jobs')
-                        .update({ manga_id: manga.id, status: 'completed' })
-                        .eq('id', jobId);
-                } else {
-                    // Handle the case where mangaData is null (failed to scrape)
-                    await supabase
-                        .from('scrape_jobs')
-                        .update({ status: 'failed', error_message: 'Failed to scrape manga info' })
-                        .eq('id', jobId);
-                    throw new Error('Failed to scrape manga info');
-                }
-
-            } else if (jobType === "chapters") {
-                const chapters = await scrapeChapters(url, source);
-                const slug = extractSlug(url);
-
-                const { data: manga } = await supabase
-                    .from('manga')
-                    .select('id')
-                    .eq('slug', slug)
-                    .single();
-
-                if (!manga) throw new Error('Manga not found. Please scrape manga info first.');
-
+            if (mangaError) {
+              console.error('Error inserting manga:', mangaError);
+              continue;
+            }
+            
+            // Scrape chapters
+            try {
+              const chapters = await scrapeChapters(item.url, source);
+              
+              if (chapters.length > 0) {
                 const chaptersData = chapters.map(ch => ({
-                    ...ch,
-                    manga_id: manga.id,
+                  ...ch,
+                  manga_id: manga.id,
                 }));
 
-                const { data: insertedChapters, error: chaptersError } = await supabase
-                    .from('chapters')
-                    .upsert(chaptersData, {
-                        onConflict: 'manga_id,chapter_number',
-                    })
-                    .select();
-
-                if (chaptersError) throw chaptersError;
-                result = insertedChapters;
-
                 await supabase
-                    .from('scrape_jobs')
-                    .update({ manga_id: manga.id, status: 'completed' })
-                    .eq('id', jobId);
+                  .from('chapters')
+                  .upsert(chaptersData, {
+                    onConflict: 'manga_id,chapter_number',
+                  });
+              }
+            } catch (chaptersError) {
+              console.error(`Error scraping chapters for ${manga.title}:`, chaptersError);
+            }
+            
+            scrapedManga.push(manga);
+            
+            // Add delay between manga to avoid rate limiting
+            await delay(getRandomDelay(2000, 4000));
+          } catch (error) {
+            console.error(`Error scraping manga ${item.url}:`, error);
+          }
+        }
+        
+        result = scrapedManga;
 
-            } else if (jobType === "catalog") {
-                const catalogManga = await scrapeCatalog(source, limit);
-                console.log(`Scraping ${catalogManga.length} manga from catalog...`);
+        await supabase
+          .from('scrape_jobs')
+          .update({ status: 'completed' })
+          .eq('id', jobId);
 
-                const scrapedManga: any[] = [];
+      } else if (jobType === "pages" && chapterId) {
+        const { data: chapter } = await supabase
+          .from('chapters')
+          .select('source_url')
+          .eq('id', chapterId)
+          .single();
 
-                for (const item of catalogManga) {
-                    try {
-                        // Scrape manga info
-                        const mangaData = await scrapeMangaInfo(item.url, source);
+        if (!chapter) throw new Error('Chapter not found');
 
-                        // Check if mangaData is valid before proceeding
-                        if (mangaData) {
-                            const { data: manga, error: mangaError } = await supabase
-                                .from('manga')
-                                .upsert({
-                                    ...mangaData,
-                                    last_scraped_at: new Date().toISOString(),
-                                }, {
-                                    onConflict: 'slug',
-                                })
-                                .select()
-                                .single();
+        const pages = await scrapeChapterPages(chapter.source_url, source);
+        
+        const pagesData = pages.map(p => ({
+          ...p,
+          chapter_id: chapterId,
+        }));
 
-                            if (mangaError) {
-                                console.error('Error inserting manga:', mangaError);
-                                continue;
-                            }
+        const { data: insertedPages, error: pagesError } = await supabase
+          .from('chapter_pages')
+          .upsert(pagesData, {
+            onConflict: 'chapter_id,page_number',
+          })
+          .select();
 
-                            // Scrape chapters
-                            try {
-                                const chapters = await scrapeChapters(item.url, source);
+        if (pagesError) throw pagesError;
+        result = insertedPages;
 
-                                if (chapters.length > 0) {
-                                    const chaptersData = chapters.map(ch => ({
-                                        ...ch,
-                                        manga_id: manga.id,
-                                    }));
+        await supabase
+          .from('scrape_jobs')
+          .update({ status: 'completed' })
+          .eq('id', jobId);
+      }
 
-                                    await supabase
-                                        .from('chapters')
-                                        .upsert(chaptersData, {
-                                            onConflict: 'manga_id,chapter_number',
-                                        });
-                                }
-                            } catch (chaptersError) {
-                                console.error(`Error scraping chapters for ${manga.title}:`, chaptersError);
-                            }
+      return new Response(
+        JSON.stringify({ success: true, data: result }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
 
-                            scrapedManga.push(manga);
+    } catch (scrapeError: any) {
+      console.error('Scrape error:', scrapeError);
+      
+      const { data: failedJob } = await supabase
+        .from('scrape_jobs')
+        .select('retry_count, max_retries')
+        .eq('id', jobId)
+        .single();
 
-                            // Add delay between manga to avoid rate limiting
-                            await delay(getRandomDelay(2000, 4000));
-                        } else {
-                            console.error(`Failed to scrape manga info for ${item.url}. Skipping.`);
-                        }
-                    } catch (error) {
-                        console.error(`Error scraping manga ${item.url}:`, error);
-                    }
-                }
+      const retryCount = (failedJob?.retry_count || 0) + 1;
+      const maxRetries = failedJob?.max_retries || 3;
 
-                result = scrapedManga;
+      await supabase
+        .from('scrape_jobs')
+        .update({
+          status: retryCount >= maxRetries ? 'failed' : 'pending',
+          error_message: scrapeError?.message || 'Unknown error',
+          retry_count: retryCount,
+        })
+        .eq('id', jobId);
 
-                await supabase
-                    .from('scrape_jobs')
-                    .update({ status: 'completed' })
-                    .eq('id', jobId);
+      throw scrapeError;
+    }
 
-            } else if (jobType === "pages" && chapterId) {
-                const { data: chapter } = await supabase
-                    .from('chapters')
-                    .select('source_url')
-                    .eq('id', chapterId)
-                    .single();
-
-                if (!chapter) throw new Error
+  } catch (error: any) {
+    console.error('Error in scrape function:', error);
+    return new Response(
+      JSON.stringify({ 
+        success: false, 
+        error: error?.message || 'Unknown error' 
+      }),
+      {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      }
+    );
+  }
+});
