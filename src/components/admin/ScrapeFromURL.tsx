@@ -43,46 +43,54 @@ export const ScrapeFromURL = ({ onSuccess }: { onSuccess: () => void }) => {
 
     setLoading(true);
     try {
-      // First scrape manga info
-      const { data: mangaData, error: mangaError } = await supabase.functions.invoke('scrape-lekmanga', {
-        body: {
-          url,
-          jobType: 'manga_info',
-          source: selectedSource,
-        },
-      });
-
-      if (mangaError) throw mangaError;
-
-      toast({
-        title: "نجح",
-        description: "نجح سحب معلومات المانجا",
-      });
-
-      // Then scrape chapters
-      const { data: chaptersData, error: chaptersError } = await supabase.functions.invoke('scrape-lekmanga', {
-        body: {
-          url,
-          jobType: 'chapters',
-          source: selectedSource,
-        },
-      });
-
-      if (chaptersError) throw chaptersError;
-
-      const chapterCount = chaptersData?.data?.length || 0;
+      console.log(`Starting scrape: ${selectedSource} - ${url}`);
       
+      // Scrape manga info and chapters together
+      const { data: response, error } = await supabase.functions.invoke('scrape-lekmanga', {
+        body: {
+          url,
+          jobType: 'chapters', // This will scrape both info and chapters
+          source: selectedSource,
+        },
+      });
+
+      if (error) {
+        console.error('Scrape error:', error);
+        throw error;
+      }
+
+      console.log('Scrape response:', response);
+
+      const manga = response?.manga;
+      const chaptersCount = response?.chaptersCount || 0;
+      
+      if (!manga || !manga.title) {
+        throw new Error('لم يتم العثور على بيانات المانجا. قد يكون الموقع محمي أو الرابط غير صحيح');
+      }
+
       toast({
-        title: "نجح",
-        description: `تم سحب ${chapterCount} فصل للمانجا`,
+        title: "✅ نجح السحب",
+        description: `تم سحب "${manga.title}" مع ${chaptersCount} فصل`,
       });
 
       setUrl("");
       onSuccess();
     } catch (error: any) {
+      console.error('Scrape failed:', error);
+      
+      let errorMsg = error.message || 'حدث خطأ غير معروف';
+      
+      if (errorMsg.includes('Cloudflare')) {
+        errorMsg = 'الموقع محمي بـ Cloudflare ولا يمكن السحب منه حالياً. جرب موقع آخر مثل onma.top';
+      } else if (errorMsg.includes('403') || errorMsg.includes('Anti-bot')) {
+        errorMsg = 'الموقع يمنع السحب الآلي. جرب موقع آخر أو انتظر قليلاً';
+      } else if (errorMsg.includes('timeout')) {
+        errorMsg = 'انتهت مهلة الاتصال. جرب مرة أخرى';
+      }
+      
       toast({
-        title: "خطأ",
-        description: `خطأ: ${error.message}`,
+        title: "❌ فشل السحب",
+        description: errorMsg,
         variant: "destructive",
       });
     } finally {
@@ -104,7 +112,9 @@ export const ScrapeFromURL = ({ onSuccess }: { onSuccess: () => void }) => {
     try {
       const source = sources?.find(s => s.name === catalogSource);
       
-      const { data, error } = await supabase.functions.invoke('scrape-lekmanga', {
+      console.log(`Starting catalog scrape: ${catalogSource}`);
+      
+      const { data: response, error } = await supabase.functions.invoke('scrape-lekmanga', {
         body: {
           url: source?.base_url,
           jobType: 'catalog',
@@ -113,18 +123,41 @@ export const ScrapeFromURL = ({ onSuccess }: { onSuccess: () => void }) => {
         },
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Catalog error:', error);
+        throw error;
+      }
+
+      console.log('Catalog response:', response);
+
+      const mangaUrls = response?.mangaUrls || [];
+      const count = response?.count || 0;
+
+      if (count === 0) {
+        throw new Error('لم يتم العثور على أي مانجا في الكتالوج');
+      }
 
       toast({
-        title: "تم بنجاح",
-        description: `تم سحب ${data?.data?.length || 0} مانجا من الكتالوج`,
+        title: "✅ تم سحب الكتالوج",
+        description: `تم العثور على ${count} مانجا. يمكنك الآن سحب كل واحدة على حدة`,
       });
+
+      // Show URLs in console for debugging
+      console.log('Found manga URLs:', mangaUrls);
 
       onSuccess();
     } catch (error: any) {
+      console.error('Catalog failed:', error);
+      
+      let errorMsg = error.message || 'حدث خطأ غير معروف';
+      
+      if (errorMsg.includes('Cloudflare') || errorMsg.includes('403')) {
+        errorMsg = 'الموقع محمي ولا يمكن السحب منه. جرب onma.top';
+      }
+      
       toast({
-        title: "خطأ",
-        description: `خطأ: ${error.message}`,
+        title: "❌ فشل سحب الكتالوج",
+        description: errorMsg,
         variant: "destructive",
       });
     } finally {
@@ -189,9 +222,19 @@ export const ScrapeFromURL = ({ onSuccess }: { onSuccess: () => void }) => {
             <h3 className="text-lg font-semibold">سحب من الكتالوج</h3>
           </div>
           
-          <p className="text-sm text-muted-foreground mb-4">
-            سحب عدة مانجا مع فصولها من الصفحة الرئيسية للموقع
-          </p>
+          <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4 mb-4">
+            <p className="text-sm text-blue-400">
+              💡 سحب الكتالوج يعثر على روابط المانجا من الصفحة الرئيسية. بعدها يمكنك سحب كل مانجا على حدة
+            </p>
+          </div>
+          
+          {selectedSource === 'lekmanga' && (
+            <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-4 mb-4">
+              <p className="text-sm text-yellow-400">
+                ⚠️ تحذير: موقع lekmanga محمي بـ Cloudflare وقد لا يعمل السحب منه
+              </p>
+            </div>
+          )}
 
           <div className="space-y-4">
             <div className="space-y-2">
