@@ -11,7 +11,7 @@ interface ScrapeMangaRequest {
   url: string;
   jobType: "manga_info" | "chapters" | "pages" | "catalog";
   chapterId?: string;
-  source_url?: string;
+  source?: string;
   limit?: number;
 }
 
@@ -263,7 +263,7 @@ async function scrapeMangaInfo(url: string, source: string) {
   console.log(`[Manga Info] Starting scrape: ${source} - ${url}`);
   
   const config = SCRAPER_CONFIGS[source];
-  if (!config) throw new Error(`Unknown source_url: ${source}`);
+  if (!config) throw new Error(`Unknown source: ${source}`);
 
   const html = await fetchHTML(url, config);
   const doc = new DOMParser().parseFromString(html, 'text/html');
@@ -303,7 +303,7 @@ async function scrapeMangaInfo(url: string, source: string) {
     artist: artist || null,
     year,
     source_url: url,
-    source_url,
+    source,
   };
 
   console.log(`[Manga Info] Success:`, { title, genres: genres.length, cover: !!cover });
@@ -314,7 +314,7 @@ async function scrapeChapters(mangaUrl: string, source: string) {
   console.log(`[Chapters] Starting scrape: ${source} - ${mangaUrl}`);
   
   const config = SCRAPER_CONFIGS[source];
-  if (!config) throw new Error(`Unknown source_url: ${source}`);
+  if (!config) throw new Error(`Unknown source: ${source}`);
 
   const html = await fetchHTML(mangaUrl, config);
   const doc = new DOMParser().parseFromString(html, 'text/html');
@@ -388,7 +388,7 @@ async function scrapeChapterPages(chapterUrl: string, source: string) {
   console.log(`[Pages] Starting scrape: ${source} - ${chapterUrl}`);
   
   const config = SCRAPER_CONFIGS[source];
-  if (!config) throw new Error(`Unknown source_url: ${source}`);
+  if (!config) throw new Error(`Unknown source: ${source}`);
 
   const html = await fetchHTML(chapterUrl, config);
   const doc = new DOMParser().parseFromString(html, 'text/html');
@@ -428,7 +428,7 @@ async function scrapeCatalog(source: string, limit = 20) {
   console.log(`[Catalog] Starting scrape: ${source} - limit ${limit}`);
   
   const config = SCRAPER_CONFIGS[source];
-  if (!config) throw new Error(`Unknown source_url: ${source}`);
+  if (!config) throw new Error(`Unknown source: ${source}`);
 
   const html = await fetchHTML(config.baseUrl, config);
   const doc = new DOMParser().parseFromString(html, 'text/html');
@@ -475,10 +475,10 @@ serve(async (req) => {
   }
 
   try {
-    const { url, jobType, chapterId, source_url = 'onma', limit = 20 }: ScrapeMangaRequest = await req.json();
+    const { url, jobType, chapterId, source = 'onma', limit = 20 }: ScrapeMangaRequest = await req.json();
     
     console.log(`\n=== NEW SCRAPE JOB ===`);
-    console.log(`Type: ${jobType}, Source_url: ${source}, URL: ${url}`);
+    console.log(`Type: ${jobType}, Source: ${source}, URL: ${url}`);
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -488,7 +488,7 @@ serve(async (req) => {
     const { data: job, error: jobError } = await supabase
       .from('scrape_jobs')
       .insert({
-        source_url,
+        source,
         url,
         status: 'processing',
         job_type: jobType,
