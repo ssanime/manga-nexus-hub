@@ -126,6 +126,27 @@ const SCRAPER_CONFIGS: Record<string, {
       catalogMangaLink: ["a"],
       catalogMangaCover: ["img"]
     }
+  },
+  "azoramoon": {
+    baseUrl: "https://azoramoon.com",
+    selectors: {
+      title: [".post-title h1", "h1.entry-title", ".series-title", "h1"],
+      cover: [".series-thumb img", ".summary_image img", "img.wp-post-image", ".cover img"],
+      description: [".series-synops", ".summary__content", ".description", ".manga-description"],
+      status: [".status .summary-content", ".series-status", ".manga-status"],
+      genres: [".series-genres a", ".genres-content a", "a[rel='tag']"],
+      author: [".author-content", ".series-author"],
+      artist: [".artist-content", ".series-artist"],
+      chapters: ["li.wp-manga-chapter", ".chapter-item", ".eplister ul li"],
+      chapterTitle: ["a", ".chapternum"],
+      chapterUrl: ["a"],
+      chapterDate: [".chapter-release-date", ".chapterdate"],
+      pageImages: ["#readerarea img", ".reading-content img", "img.wp-manga-chapter-img"],
+      year: [".year", ".release-year"],
+      catalogMangaCard: [".bs", ".listupd .bsx", ".page-item-detail"],
+      catalogMangaLink: ["a", ".bsx a"],
+      catalogMangaCover: ["img"]
+    }
   }
 };
 

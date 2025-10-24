@@ -197,9 +197,9 @@ export type Database = {
           max_retries: number | null
           retry_count: number | null
           source: string
-          source_url: string
           status: string
           updated_at: string
+          url: string
         }
         Insert: {
           created_at?: string
@@ -211,9 +211,9 @@ export type Database = {
           max_retries?: number | null
           retry_count?: number | null
           source?: string
-          source_url: string
           status: string
           updated_at?: string
+          url: string
         }
         Update: {
           created_at?: string
@@ -225,9 +225,9 @@ export type Database = {
           max_retries?: number | null
           retry_count?: number | null
           source?: string
-          source_url?: string
           status?: string
           updated_at?: string
+          url?: string
         }
         Relationships: [
           {
