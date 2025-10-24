@@ -196,6 +196,7 @@ export type Database = {
           manga_id: string | null
           max_retries: number | null
           retry_count: number | null
+          source: string
           source_url: string
           status: string
           updated_at: string
@@ -209,6 +210,7 @@ export type Database = {
           manga_id?: string | null
           max_retries?: number | null
           retry_count?: number | null
+          source?: string
           source_url: string
           status: string
           updated_at?: string
@@ -222,6 +224,7 @@ export type Database = {
           manga_id?: string | null
           max_retries?: number | null
           retry_count?: number | null
+          source?: string
           source_url?: string
           status?: string
           updated_at?: string
