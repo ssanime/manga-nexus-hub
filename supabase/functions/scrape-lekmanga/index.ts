@@ -15,14 +15,15 @@ interface ScrapeMangaRequest {
   limit?: number;
 }
 
-// Advanced User-Agents rotation
+// Advanced User-Agents rotation with more realistic fingerprints
 const USER_AGENTS = [
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36 Edg/130.0.0.0',
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
   'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:133.0) Gecko/20100101 Firefox/133.0',
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.2 Safari/605.1.15',
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 OPR/117.0.0.0',
 ];
 
 function getRandomUserAgent(): string {
@@ -150,8 +151,9 @@ const SCRAPER_CONFIGS: Record<string, {
   }
 };
 
-const MAX_RETRIES = 3;
-const BASE_DELAY = 2000;
+const MAX_RETRIES = 5;
+const BASE_DELAY = 3000;
+const CLOUDFLARE_RETRY_DELAY = 10000;
 
 async function delay(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -161,14 +163,15 @@ async function humanDelay(): Promise<void> {
   await delay(getRandomDelay(1000, 3000));
 }
 
-// Smart HTML fetcher with anti-bot evasion
+// Smart HTML fetcher with enhanced anti-bot evasion
 async function fetchHTML(url: string, config: any, retryCount = 0): Promise<string> {
   try {
     console.log(`[Fetch] Attempt ${retryCount + 1}/${MAX_RETRIES + 1}: ${url}`);
     
-    await humanDelay();
+    // Longer delays between retries to appear more human
+    await delay(getRandomDelay(2000, 5000));
     
-    const headers = getBrowserHeaders(retryCount > 0 ? config.baseUrl : undefined);
+    const headers = getBrowserHeaders(retryCount > 0 ? url : undefined);
     
     const response = await fetch(url, {
       method: 'GET',
@@ -176,37 +179,78 @@ async function fetchHTML(url: string, config: any, retryCount = 0): Promise<stri
       redirect: 'follow',
     });
 
-    console.log(`[Fetch] Status: ${response.status}`);
+    console.log(`[Fetch] Status: ${response.status}, Content-Type: ${response.headers.get('content-type')}`);
     
     if (!response.ok) {
-      if (response.status === 403 || response.status === 503) {
-        throw new Error(`Anti-bot protection detected (${response.status})`);
+      if (response.status === 403) {
+        console.error('[Fetch] 403 Forbidden - Cloudflare or anti-bot protection active');
+        throw new Error('CLOUDFLARE_BLOCK');
+      }
+      if (response.status === 503) {
+        console.error('[Fetch] 503 Service Unavailable - Site may be down or blocking');
+        throw new Error('SERVICE_UNAVAILABLE');
       }
       throw new Error(`HTTP ${response.status}`);
     }
 
     const html = await response.text();
     
-    // Detect Cloudflare challenges
-    const cfPatterns = ['cf-browser-verification', 'challenge-platform', 'cf_challenge', 'ray_id'];
-    if (cfPatterns.some(p => html.toLowerCase().includes(p))) {
-      throw new Error('Cloudflare challenge detected');
+    // Advanced Cloudflare detection
+    const cfPatterns = [
+      'cf-browser-verification',
+      'challenge-platform', 
+      'cf_challenge',
+      'just a moment',
+      'checking your browser',
+      'cloudflare',
+      'ray id',
+      '__cf_chl_jschl_tk__'
+    ];
+    
+    const lowerHtml = html.toLowerCase();
+    const detectedPatterns = cfPatterns.filter(p => lowerHtml.includes(p));
+    
+    if (detectedPatterns.length > 0) {
+      console.error(`[Fetch] Cloudflare detected: ${detectedPatterns.join(', ')}`);
+      throw new Error('CLOUDFLARE_CHALLENGE');
     }
     
+    // Check for actual content
     if (html.length < 500) {
-      throw new Error('Response too short');
+      console.error(`[Fetch] Response too short: ${html.length} bytes`);
+      throw new Error('EMPTY_RESPONSE');
     }
     
-    console.log(`[Fetch] Success: ${html.length} bytes`);
+    // Verify we got HTML content
+    if (!html.includes('<html') && !html.includes('<!DOCTYPE')) {
+      console.error('[Fetch] Response does not appear to be HTML');
+      throw new Error('INVALID_HTML');
+    }
+    
+    console.log(`[Fetch] ✓ Success: ${html.length} bytes, appears valid`);
     return html;
   } catch (error: any) {
-    console.error(`[Fetch] Error:`, error?.message || error);
+    const errorMsg = error?.message || String(error);
+    console.error(`[Fetch] Error on attempt ${retryCount + 1}:`, errorMsg);
     
     if (retryCount < MAX_RETRIES) {
-      const delayMs = BASE_DELAY * Math.pow(2, retryCount) + getRandomDelay(0, 1000);
-      console.log(`[Fetch] Retrying after ${delayMs}ms...`);
+      let delayMs = BASE_DELAY * Math.pow(2, retryCount) + getRandomDelay(1000, 3000);
+      
+      // Longer delays for Cloudflare blocks
+      if (errorMsg.includes('CLOUDFLARE')) {
+        delayMs = CLOUDFLARE_RETRY_DELAY + getRandomDelay(2000, 5000);
+        console.log(`[Fetch] ⏳ Cloudflare detected, waiting ${delayMs}ms before retry...`);
+      } else {
+        console.log(`[Fetch] ⏳ Retrying after ${delayMs}ms...`);
+      }
+      
       await delay(delayMs);
       return fetchHTML(url, config, retryCount + 1);
+    }
+    
+    // Provide user-friendly error message
+    if (errorMsg.includes('CLOUDFLARE')) {
+      throw new Error('Unable to bypass Cloudflare protection after multiple attempts. Try using a different source or contact site administrator.');
     }
     
     throw error;
@@ -281,7 +325,7 @@ function extractSlug(url: string): string {
 }
 
 async function scrapeMangaInfo(url: string, source: string) {
-  console.log(`[Manga Info] Starting scrape: ${source} - ${url}`);
+  console.log(`[Manga Info] 📖 Starting scrape from ${source.toUpperCase()}: ${url}`);
   
   const config = SCRAPER_CONFIGS[source];
   if (!config) throw new Error(`Unknown source: ${source}`);
@@ -332,7 +376,7 @@ async function scrapeMangaInfo(url: string, source: string) {
 }
 
 async function scrapeChapters(mangaUrl: string, source: string) {
-  console.log(`[Chapters] Starting scrape: ${source} - ${mangaUrl}`);
+  console.log(`[Chapters] 📚 Starting scrape from ${source.toUpperCase()}: ${mangaUrl}`);
   
   const config = SCRAPER_CONFIGS[source];
   if (!config) throw new Error(`Unknown source: ${source}`);
@@ -446,7 +490,7 @@ async function scrapeChapterPages(chapterUrl: string, source: string) {
 }
 
 async function scrapeCatalog(source: string, limit = 20) {
-  console.log(`[Catalog] Starting scrape: ${source} - limit ${limit}`);
+  console.log(`[Catalog] 📑 Starting scrape from ${source.toUpperCase()} - limit ${limit}`);
   
   const config = SCRAPER_CONFIGS[source];
   if (!config) throw new Error(`Unknown source: ${source}`);
@@ -498,8 +542,12 @@ serve(async (req) => {
   try {
     const { url, jobType, chapterId, source = 'onma', limit = 20 }: ScrapeMangaRequest = await req.json();
     
-    console.log(`\n=== NEW SCRAPE JOB ===`);
-    console.log(`Type: ${jobType}, Source: ${source}, URL: ${url}`);
+    console.log(`\n========================================`);
+    console.log(`🚀 NEW SCRAPE JOB`);
+    console.log(`📍 Source: ${source.toUpperCase()}`);
+    console.log(`🎯 Type: ${jobType}`);
+    console.log(`🔗 URL: ${url}`);
+    console.log(`========================================\n`);
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -609,24 +657,40 @@ serve(async (req) => {
       throw new Error('Invalid job type');
 
     } catch (scrapeError: any) {
-      console.error('[Scrape] Error:', scrapeError?.message || scrapeError);
+      const errorMsg = scrapeError?.message || String(scrapeError);
+      console.error(`[Scrape] ❌ Error from ${source.toUpperCase()}:`, errorMsg);
+      
+      // Provide user-friendly error messages
+      let userFriendlyError = errorMsg;
+      if (errorMsg.includes('CLOUDFLARE') || errorMsg.includes('Cloudflare')) {
+        userFriendlyError = `${source.toUpperCase()} is protected by Cloudflare. Cannot bypass security from server. Please try a different source or contact the site administrator.`;
+      } else if (errorMsg.includes('403')) {
+        userFriendlyError = `${source.toUpperCase()} is blocking automated access (403 Forbidden). Try a different source.`;
+      } else if (errorMsg.includes('503')) {
+        userFriendlyError = `${source.toUpperCase()} is temporarily unavailable (503). Try again later.`;
+      }
       
       await supabase
         .from('scrape_jobs')
         .update({ 
           status: 'failed', 
-          error_message: scrapeError?.message || String(scrapeError),
+          error_message: userFriendlyError,
           completed_at: new Date().toISOString() 
         })
         .eq('id', job.id);
 
-      throw scrapeError;
+      throw new Error(userFriendlyError);
     }
 
   } catch (error: any) {
-    console.error('[Main] Error:', error);
+    const errorMsg = error?.message || String(error);
+    console.error('[Main] ❌ Fatal Error:', errorMsg);
+    
     return new Response(
-      JSON.stringify({ error: error?.message || String(error) }),
+      JSON.stringify({ 
+        error: errorMsg,
+        success: false
+      }),
       { 
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
