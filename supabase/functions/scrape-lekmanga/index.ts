@@ -65,91 +65,111 @@ function getBrowserHeaders(referer?: string): HeadersInit {
   return headers;
 }
 
-// Smart selector configurations with multiple fallbacks
-const SCRAPER_CONFIGS: Record<string, {
-  baseUrl: string;
-  selectors: {
-    title: string[];
-    cover: string[];
-    description: string[];
-    status: string[];
-    genres: string[];
-    author: string[];
-    artist: string[];
-    chapters: string[];
-    chapterTitle: string[];
-    chapterUrl: string[];
-    chapterDate: string[];
-    pageImages: string[];
-    year?: string[];
-    catalogMangaCard?: string[];
-    catalogMangaLink?: string[];
-    catalogMangaCover?: string[];
-  };
-}> = {
-  "onma": {
-    baseUrl: "https://www.onma.top",
-    selectors: {
-      title: [".panel-heading", "h1", ".title", ".manga-title"],
-      cover: ["img.img-responsive", ".thumbnail img", ".manga-cover img", "img[alt]"],
-      description: [".well p", ".description", ".manga-description", ".summary"],
-      status: [".label", ".status", ".manga-status"],
-      genres: ["a[href*='genre']", ".genre a", ".tag a", ".category a"],
-      author: ["a[href*='author']", ".author", ".manga-author"],
-      artist: ["a[href*='artist']", ".artist", ".manga-artist"],
-      chapters: ["ul.chapters li", ".chapter-item", ".chapter-list li", "li[class*='chapter']"],
-      chapterTitle: [".chapter-title-rtl a", "a", ".chapter-name", ".chapter-title"],
-      chapterUrl: [".chapter-title-rtl a", "a", ".chapter-link"],
-      chapterDate: [".date-chapter-title-rtl", ".date", ".chapter-date", ".release-date"],
-      pageImages: [".img-responsive", ".chapter-img", "img[alt*='page']", ".page-image", "img.lazy"],
-      year: [".text", ".year", ".release-year"],
-      catalogMangaCard: [".photo", ".manga-card", ".item", ".manga-item"],
-      catalogMangaLink: [".manga-name a", "a", ".title a", ".manga-link"],
-      catalogMangaCover: [".thumbnail img", "img", ".cover img", ".manga-cover"]
+// Load scraper configuration from database or use defaults
+async function loadScraperConfig(supabase: any, sourceName: string) {
+  console.log(`[Config] Loading config for source: ${sourceName}`);
+  
+  // Try to load from database first
+  const { data: source, error } = await supabase
+    .from('scraper_sources')
+    .select('*')
+    .eq('name', sourceName.toLowerCase())
+    .eq('is_active', true)
+    .single();
+  
+  if (!error && source) {
+    console.log(`[Config] ✓ Loaded dynamic config for ${sourceName}`);
+    
+    // Convert database format to expected format
+    const selectors = source.config?.selectors || {};
+    const convertedSelectors: any = {};
+    
+    // Convert each selector to array format
+    for (const [key, value] of Object.entries(selectors)) {
+      if (typeof value === 'string') {
+        convertedSelectors[key] = value.split(',').map((s: string) => s.trim()).filter(Boolean);
+      } else if (Array.isArray(value)) {
+        convertedSelectors[key] = value;
+      } else {
+        convertedSelectors[key] = [];
+      }
     }
-  },
-  "lekmanga": {
-    baseUrl: "https://lekmanga.net",
-    selectors: {
-      title: ["h1.entry-title", ".post-title", "h1"],
-      cover: [".summary_image img", "img.wp-post-image", ".manga-cover img"],
-      description: [".summary__content", ".description-summary", ".manga-excerpt"],
-      status: [".post-status .summary-content", ".manga-status"],
-      genres: [".genres-content a", ".manga-genres a"],
-      author: [".author-content", ".manga-author"],
-      artist: [".artist-content", ".manga-artist"],
-      chapters: ["li.wp-manga-chapter", ".chapter-item"],
-      chapterTitle: ["a"],
-      chapterUrl: ["a"],
-      chapterDate: [".chapter-release-date"],
-      pageImages: [".reading-content img", "img.wp-manga-chapter-img", ".page-break img"],
-      catalogMangaCard: [".page-item-detail", ".manga-item"],
-      catalogMangaLink: ["a"],
-      catalogMangaCover: ["img"]
-    }
-  },
-  "azoramoon": {
-    baseUrl: "https://azoramoon.com",
-    selectors: {
-      title: [".post-title h1", "h1.entry-title", ".series-title", "h1"],
-      cover: [".series-thumb img", ".summary_image img", "img.wp-post-image", ".cover img"],
-      description: [".series-synops", ".summary__content", ".description", ".manga-description"],
-      status: [".status .summary-content", ".series-status", ".manga-status"],
-      genres: [".series-genres a", ".genres-content a", "a[rel='tag']"],
-      author: [".author-content", ".series-author"],
-      artist: [".artist-content", ".series-artist"],
-      chapters: ["li.wp-manga-chapter", ".chapter-item", ".eplister ul li"],
-      chapterTitle: ["a", ".chapternum"],
-      chapterUrl: ["a"],
-      chapterDate: [".chapter-release-date", ".chapterdate"],
-      pageImages: ["#readerarea img", ".reading-content img", "img.wp-manga-chapter-img"],
-      year: [".year", ".release-year"],
-      catalogMangaCard: [".bs", ".listupd .bsx", ".page-item-detail"],
-      catalogMangaLink: ["a", ".bsx a"],
-      catalogMangaCover: ["img"]
-    }
+    
+    return {
+      baseUrl: source.base_url,
+      selectors: convertedSelectors
+    };
   }
-};
+  
+  // Fallback to hardcoded configs
+  console.log(`[Config] ⚠️ Using fallback config for ${sourceName}`);
+  const FALLBACK_CONFIGS: Record<string, any> = {
+    "onma": {
+      baseUrl: "https://www.onma.top",
+      selectors: {
+        title: [".panel-heading", "h1", ".title", ".manga-title"],
+        cover: ["img.img-responsive", ".thumbnail img", ".manga-cover img", "img[alt]"],
+        description: [".well p", ".description", ".manga-description", ".summary"],
+        status: [".label", ".status", ".manga-status"],
+        genres: ["a[href*='genre']", ".genre a", ".tag a", ".category a"],
+        author: ["a[href*='author']", ".author", ".manga-author"],
+        artist: ["a[href*='artist']", ".artist", ".manga-artist"],
+        chapters: ["ul.chapters li", ".chapter-item", ".chapter-list li", "li[class*='chapter']"],
+        chapterTitle: [".chapter-title-rtl a", "a", ".chapter-name", ".chapter-title"],
+        chapterUrl: [".chapter-title-rtl a", "a", ".chapter-link"],
+        chapterDate: [".date-chapter-title-rtl", ".date", ".chapter-date", ".release-date"],
+        pageImages: [".img-responsive", ".chapter-img", "img[alt*='page']", ".page-image", "img.lazy"],
+        year: [".text", ".year", ".release-year"],
+        catalogMangaCard: [".photo", ".manga-card", ".item", ".manga-item"],
+        catalogMangaLink: [".manga-name a", "a", ".title a", ".manga-link"],
+        catalogMangaCover: [".thumbnail img", "img", ".cover img", ".manga-cover"]
+      }
+    },
+    "lekmanga": {
+      baseUrl: "https://lekmanga.net",
+      selectors: {
+        title: ["h1.entry-title", ".post-title", "h1"],
+        cover: [".summary_image img", "img.wp-post-image", ".manga-cover img"],
+        description: [".summary__content", ".description-summary", ".manga-excerpt"],
+        status: [".post-status .summary-content", ".manga-status"],
+        genres: [".genres-content a", ".manga-genres a"],
+        author: [".author-content", ".manga-author"],
+        artist: [".artist-content", ".manga-artist"],
+        chapters: ["li.wp-manga-chapter", ".chapter-item"],
+        chapterTitle: ["a"],
+        chapterUrl: ["a"],
+        chapterDate: [".chapter-release-date"],
+        pageImages: [".reading-content img", "img.wp-manga-chapter-img", ".page-break img"],
+        catalogMangaCard: [".page-item-detail", ".manga-item"],
+        catalogMangaLink: ["a"],
+        catalogMangaCover: ["img"]
+      }
+    },
+    "azoramoon": {
+      baseUrl: "https://azoramoon.com",
+      selectors: {
+        title: [".post-title h1", "h1.entry-title", ".series-title", "h1"],
+        cover: [".series-thumb img", ".summary_image img", "img.wp-post-image", ".cover img"],
+        description: [".series-synops", ".summary__content", ".description", ".manga-description"],
+        status: [".status .summary-content", ".series-status", ".manga-status"],
+        genres: [".series-genres a", ".genres-content a", "a[rel='tag']"],
+        author: [".author-content", ".series-author"],
+        artist: [".artist-content", ".series-artist"],
+        chapters: ["li.wp-manga-chapter", ".chapter-item", ".eplister ul li"],
+        chapterTitle: ["a", ".chapternum"],
+        chapterUrl: ["a"],
+        chapterDate: [".chapter-release-date", ".chapterdate"],
+        pageImages: ["#readerarea img", ".reading-content img", "img.wp-manga-chapter-img"],
+        year: [".year", ".release-year"],
+        catalogMangaCard: [".bs", ".listupd .bsx", ".page-item-detail"],
+        catalogMangaLink: ["a", ".bsx a"],
+        catalogMangaCover: ["img"]
+      }
+    }
+  };
+  
+  return FALLBACK_CONFIGS[sourceName.toLowerCase()] || null;
+}
 
 const MAX_RETRIES = 6;
 const BASE_DELAY = 4000;
@@ -364,11 +384,11 @@ function extractSlug(url: string): string {
   return match ? match[1] : '';
 }
 
-async function scrapeMangaInfo(url: string, source: string) {
+async function scrapeMangaInfo(url: string, source: string, supabase: any) {
   console.log(`[Manga Info] 📖 Starting scrape from ${source.toUpperCase()}: ${url}`);
   
-  const config = SCRAPER_CONFIGS[source];
-  if (!config) throw new Error(`Unknown source: ${source}`);
+  const config = await loadScraperConfig(supabase, source);
+  if (!config) throw new Error(`Unknown source: ${source}. Please add it in Sources Manager first.`);
 
   const html = await fetchHTML(url, config);
   const doc = new DOMParser().parseFromString(html, 'text/html');
@@ -415,11 +435,11 @@ async function scrapeMangaInfo(url: string, source: string) {
   return mangaData;
 }
 
-async function scrapeChapters(mangaUrl: string, source: string) {
+async function scrapeChapters(mangaUrl: string, source: string, supabase: any) {
   console.log(`[Chapters] 📚 Starting scrape from ${source.toUpperCase()}: ${mangaUrl}`);
   
-  const config = SCRAPER_CONFIGS[source];
-  if (!config) throw new Error(`Unknown source: ${source}`);
+  const config = await loadScraperConfig(supabase, source);
+  if (!config) throw new Error(`Unknown source: ${source}. Please add it in Sources Manager first.`);
 
   const html = await fetchHTML(mangaUrl, config);
   const doc = new DOMParser().parseFromString(html, 'text/html');
@@ -489,11 +509,11 @@ async function scrapeChapters(mangaUrl: string, source: string) {
   return chapters;
 }
 
-async function scrapeChapterPages(chapterUrl: string, source: string) {
+async function scrapeChapterPages(chapterUrl: string, source: string, supabase: any) {
   console.log(`[Pages] Starting scrape: ${source} - ${chapterUrl}`);
   
-  const config = SCRAPER_CONFIGS[source];
-  if (!config) throw new Error(`Unknown source: ${source}`);
+  const config = await loadScraperConfig(supabase, source);
+  if (!config) throw new Error(`Unknown source: ${source}. Please add it in Sources Manager first.`);
 
   const html = await fetchHTML(chapterUrl, config);
   const doc = new DOMParser().parseFromString(html, 'text/html');
@@ -529,11 +549,11 @@ async function scrapeChapterPages(chapterUrl: string, source: string) {
   return pages;
 }
 
-async function scrapeCatalog(source: string, limit = 20) {
+async function scrapeCatalog(source: string, limit = 20, supabase: any) {
   console.log(`[Catalog] 📑 Starting scrape from ${source.toUpperCase()} - limit ${limit}`);
   
-  const config = SCRAPER_CONFIGS[source];
-  if (!config) throw new Error(`Unknown source: ${source}`);
+  const config = await loadScraperConfig(supabase, source);
+  if (!config) throw new Error(`Unknown source: ${source}. Please add it in Sources Manager first.`);
 
   const html = await fetchHTML(config.baseUrl, config);
   const doc = new DOMParser().parseFromString(html, 'text/html');
@@ -616,7 +636,7 @@ serve(async (req) => {
 
     try {
       if (jobType === 'catalog') {
-        const mangaUrls = await scrapeCatalog(source, limit);
+        const mangaUrls = await scrapeCatalog(source, limit, supabase);
         
         await supabase
           .from('scrape_jobs')
@@ -630,7 +650,7 @@ serve(async (req) => {
       }
 
       if (jobType === 'manga_info' || jobType === 'chapters') {
-        const mangaInfo = await scrapeMangaInfo(url, source);
+        const mangaInfo = await scrapeMangaInfo(url, source, supabase);
         
         const { data: manga, error: mangaError } = await supabase
           .from('manga')
@@ -642,7 +662,7 @@ serve(async (req) => {
 
         let chaptersData = [];
         if (jobType === 'chapters') {
-          chaptersData = await scrapeChapters(url, source);
+          chaptersData = await scrapeChapters(url, source, supabase);
           
           for (const chapter of chaptersData) {
             await supabase
@@ -671,7 +691,7 @@ serve(async (req) => {
       }
 
       if (jobType === 'pages' && chapterId) {
-        const pages = await scrapeChapterPages(url, source);
+        const pages = await scrapeChapterPages(url, source, supabase);
         
         for (const page of pages) {
           await supabase
