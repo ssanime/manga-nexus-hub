@@ -69,36 +69,48 @@ function getBrowserHeaders(referer?: string): HeadersInit {
 async function loadScraperConfig(supabase: any, sourceName: string) {
   console.log(`[Config] Loading config for source: ${sourceName}`);
   
-  // Try to load from database first
-  const { data: source, error } = await supabase
-    .from('scraper_sources')
-    .select('*')
-    .eq('name', sourceName.toLowerCase())
-    .eq('is_active', true)
-    .single();
-  
-  if (!error && source) {
-    console.log(`[Config] ✓ Loaded dynamic config for ${sourceName}`);
+  try {
+    // Try to load from database first
+    const { data: source, error } = await supabase
+      .from('scraper_sources')
+      .select('*')
+      .eq('name', sourceName.toLowerCase())
+      .eq('is_active', true)
+      .single();
     
-    // Convert database format to expected format
-    const selectors = source.config?.selectors || {};
-    const convertedSelectors: any = {};
+    console.log(`[Config] DB Query - Error:`, error, 'Source:', source?.name);
     
-    // Convert each selector to array format
-    for (const [key, value] of Object.entries(selectors)) {
-      if (typeof value === 'string') {
-        convertedSelectors[key] = value.split(',').map((s: string) => s.trim()).filter(Boolean);
-      } else if (Array.isArray(value)) {
-        convertedSelectors[key] = value;
-      } else {
-        convertedSelectors[key] = [];
-      }
+    if (error) {
+      console.log(`[Config] ⚠️ DB error or source not found:`, error.message);
     }
     
-    return {
-      baseUrl: source.base_url,
-      selectors: convertedSelectors
-    };
+    if (source && !error) {
+      console.log(`[Config] ✓ Loaded dynamic config for ${sourceName}`, source.base_url);
+      
+      // Convert database format to expected format
+      const selectors = source.config?.selectors || {};
+      const convertedSelectors: any = {};
+      
+      // Convert each selector to array format
+      for (const [key, value] of Object.entries(selectors)) {
+        if (typeof value === 'string') {
+          convertedSelectors[key] = value.split(',').map((s: string) => s.trim()).filter(Boolean);
+        } else if (Array.isArray(value)) {
+          convertedSelectors[key] = value;
+        } else {
+          convertedSelectors[key] = [];
+        }
+      }
+      
+      console.log(`[Config] Converted selectors:`, Object.keys(convertedSelectors));
+      
+      return {
+        baseUrl: source.base_url,
+        selectors: convertedSelectors
+      };
+    }
+  } catch (err: any) {
+    console.error(`[Config] Exception loading config:`, err.message);
   }
   
   // Fallback to hardcoded configs
