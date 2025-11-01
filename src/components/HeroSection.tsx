@@ -1,40 +1,89 @@
-import { Button } from "@/components/ui/button";
-import { ArrowRight } from "lucide-react";
-import { Link } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { MangaCarousel } from "./MangaCarousel";
 
 export const HeroSection = () => {
+  const [popularManga, setPopularManga] = useState<any[]>([]);
+  const [popularManhwa, setPopularManhwa] = useState<any[]>([]);
+  const [popularManhua, setPopularManhua] = useState<any[]>([]);
+
+  useEffect(() => {
+    const fetchPopularContent = async () => {
+      // Fetch popular Manga
+      const { data: manga } = await supabase
+        .from("manga")
+        .select("*")
+        .contains("genres", ["Manga"])
+        .order("views", { ascending: false })
+        .limit(10);
+      
+      // Fetch popular Manhwa
+      const { data: manhwa } = await supabase
+        .from("manga")
+        .select("*")
+        .contains("genres", ["Manhwa"])
+        .order("views", { ascending: false })
+        .limit(10);
+      
+      // Fetch popular Manhua
+      const { data: manhua } = await supabase
+        .from("manga")
+        .select("*")
+        .contains("genres", ["Manhua"])
+        .order("views", { ascending: false })
+        .limit(10);
+
+      setPopularManga(manga || []);
+      setPopularManhwa(manhwa || []);
+      setPopularManhua(manhua || []);
+    };
+
+    fetchPopularContent();
+  }, []);
+
   return (
-    <section className="relative overflow-hidden bg-gradient-to-br from-card via-background to-card py-12 md:py-20">
+    <section className="relative overflow-hidden bg-gradient-to-br from-card via-background to-card py-8 md:py-12">
       {/* Animated Background */}
       <div className="absolute inset-0 opacity-20">
         <div className="absolute top-1/4 left-1/4 h-96 w-96 bg-primary/30 rounded-full blur-3xl animate-pulse" />
         <div className="absolute bottom-1/4 right-1/4 h-96 w-96 bg-accent/30 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }} />
       </div>
 
-      <div className="container relative z-10 mx-auto px-4">
-        <div className="flex flex-col items-center text-center">
-          {/* Main Heading */}
-          <h1 className="mb-6 text-4xl md:text-6xl lg:text-7xl font-bold leading-tight">
+      <div className="container relative z-10 mx-auto px-4 space-y-12">
+        {/* Popular Manga */}
+        <div>
+          <h2 className="text-2xl md:text-3xl font-bold mb-6 text-center">
             <span className="bg-manga-gradient bg-clip-text text-transparent">
-              اقرأ آلاف المانجا
+              المانجا المشهورة
             </span>
-            <br />
-            <span className="text-foreground">مجاناً وبدون إعلانات</span>
-          </h1>
+          </h2>
+          {popularManga.length > 0 && (
+            <MangaCarousel manga={popularManga} size="large" />
+          )}
+        </div>
 
-          {/* CTA Button */}
-          <Link to="/browse">
-            <Button
-              size="lg"
-              className="group relative overflow-hidden bg-primary hover:bg-primary/90 text-primary-foreground shadow-manga-glow"
-            >
-              <span className="relative z-10 flex items-center gap-2">
-                ابدأ القراءة الآن
-                <ArrowRight className="h-5 w-5 transition-transform group-hover:translate-x-1" />
-              </span>
-              <div className="absolute inset-0 bg-gradient-to-r from-primary to-accent opacity-0 group-hover:opacity-100 transition-opacity" />
-            </Button>
-          </Link>
+        {/* Popular Manhwa */}
+        <div>
+          <h2 className="text-2xl md:text-3xl font-bold mb-6 text-center">
+            <span className="bg-manga-gradient bg-clip-text text-transparent">
+              المانهوات المشهورة
+            </span>
+          </h2>
+          {popularManhwa.length > 0 && (
+            <MangaCarousel manga={popularManhwa} size="large" />
+          )}
+        </div>
+
+        {/* Popular Manhua */}
+        <div>
+          <h2 className="text-2xl md:text-3xl font-bold mb-6 text-center">
+            <span className="bg-manga-gradient bg-clip-text text-transparent">
+              المانهات المشهورة
+            </span>
+          </h2>
+          {popularManhua.length > 0 && (
+            <MangaCarousel manga={popularManhua} size="large" />
+          )}
         </div>
       </div>
     </section>
