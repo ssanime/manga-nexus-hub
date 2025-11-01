@@ -151,9 +151,10 @@ const SCRAPER_CONFIGS: Record<string, {
   }
 };
 
-const MAX_RETRIES = 5;
-const BASE_DELAY = 3000;
-const CLOUDFLARE_RETRY_DELAY = 10000;
+const MAX_RETRIES = 6;
+const BASE_DELAY = 4000;
+const CLOUDFLARE_RETRY_DELAY = 12000;
+const FETCH_TIMEOUT = 30000; // 30 seconds timeout
 
 async function delay(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -163,7 +164,7 @@ async function humanDelay(): Promise<void> {
   await delay(getRandomDelay(1000, 3000));
 }
 
-// Smart HTML fetcher with enhanced anti-bot evasion
+// Smart HTML fetcher with enhanced anti-bot evasion and timeout handling
 async function fetchHTML(url: string, config: any, retryCount = 0): Promise<string> {
   try {
     console.log(`[Fetch] Attempt ${retryCount + 1}/${MAX_RETRIES + 1}: ${url}`);
@@ -173,11 +174,21 @@ async function fetchHTML(url: string, config: any, retryCount = 0): Promise<stri
     
     const headers = getBrowserHeaders(retryCount > 0 ? url : undefined);
     
-    const response = await fetch(url, {
-      method: 'GET',
-      headers,
-      redirect: 'follow',
-    });
+    // Create AbortController for timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
+    
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        method: 'GET',
+        headers,
+        redirect: 'follow',
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
 
     console.log(`[Fetch] Status: ${response.status}, Content-Type: ${response.headers.get('content-type')}`);
     
@@ -189,6 +200,14 @@ async function fetchHTML(url: string, config: any, retryCount = 0): Promise<stri
       if (response.status === 503) {
         console.error('[Fetch] 503 Service Unavailable - Site may be down or blocking');
         throw new Error('SERVICE_UNAVAILABLE');
+      }
+      if (response.status === 522) {
+        console.error('[Fetch] 522 Connection Timed Out - Origin server not responding');
+        throw new Error('ORIGIN_TIMEOUT');
+      }
+      if (response.status === 524) {
+        console.error('[Fetch] 524 Timeout - Cloudflare timeout waiting for origin');
+        throw new Error('CLOUDFLARE_TIMEOUT');
       }
       throw new Error(`HTTP ${response.status}`);
     }
@@ -233,13 +252,28 @@ async function fetchHTML(url: string, config: any, retryCount = 0): Promise<stri
     const errorMsg = error?.message || String(error);
     console.error(`[Fetch] Error on attempt ${retryCount + 1}:`, errorMsg);
     
+    // Handle AbortError (timeout)
+    if (error.name === 'AbortError') {
+      console.error(`[Fetch] Request timeout after ${FETCH_TIMEOUT}ms`);
+      if (retryCount < MAX_RETRIES) {
+        const delayMs = BASE_DELAY * Math.pow(2, retryCount) + getRandomDelay(2000, 4000);
+        console.log(`[Fetch] ⏳ Timeout occurred, retrying after ${delayMs}ms...`);
+        await delay(delayMs);
+        return fetchHTML(url, config, retryCount + 1);
+      }
+      throw new Error('REQUEST_TIMEOUT');
+    }
+    
     if (retryCount < MAX_RETRIES) {
       let delayMs = BASE_DELAY * Math.pow(2, retryCount) + getRandomDelay(1000, 3000);
       
-      // Longer delays for Cloudflare blocks
+      // Longer delays for specific error types
       if (errorMsg.includes('CLOUDFLARE')) {
-        delayMs = CLOUDFLARE_RETRY_DELAY + getRandomDelay(2000, 5000);
+        delayMs = CLOUDFLARE_RETRY_DELAY + getRandomDelay(3000, 6000);
         console.log(`[Fetch] ⏳ Cloudflare detected, waiting ${delayMs}ms before retry...`);
+      } else if (errorMsg.includes('TIMEOUT') || errorMsg.includes('522') || errorMsg.includes('524')) {
+        delayMs = BASE_DELAY * Math.pow(2, retryCount + 1) + getRandomDelay(3000, 7000);
+        console.log(`[Fetch] ⏳ Timeout/522/524 error, waiting ${delayMs}ms before retry...`);
       } else {
         console.log(`[Fetch] ⏳ Retrying after ${delayMs}ms...`);
       }
@@ -248,9 +282,15 @@ async function fetchHTML(url: string, config: any, retryCount = 0): Promise<stri
       return fetchHTML(url, config, retryCount + 1);
     }
     
-    // Provide user-friendly error message
+    // Provide user-friendly error messages
     if (errorMsg.includes('CLOUDFLARE')) {
-      throw new Error('Unable to bypass Cloudflare protection after multiple attempts. Try using a different source or contact site administrator.');
+      throw new Error('CLOUDFLARE_PROTECTION');
+    } else if (errorMsg.includes('TIMEOUT') || errorMsg.includes('REQUEST_TIMEOUT')) {
+      throw new Error('REQUEST_TIMEOUT');
+    } else if (errorMsg.includes('ORIGIN_TIMEOUT') || errorMsg.includes('522')) {
+      throw new Error('ORIGIN_SERVER_TIMEOUT');
+    } else if (errorMsg.includes('524')) {
+      throw new Error('CLOUDFLARE_GATEWAY_TIMEOUT');
     }
     
     throw error;
@@ -660,15 +700,37 @@ serve(async (req) => {
       const errorMsg = scrapeError?.message || String(scrapeError);
       console.error(`[Scrape] ❌ Error from ${source.toUpperCase()}:`, errorMsg);
       
-      // Provide user-friendly error messages
+      // Provide user-friendly error messages in Arabic and English
       let userFriendlyError = errorMsg;
-      if (errorMsg.includes('CLOUDFLARE') || errorMsg.includes('Cloudflare')) {
-        userFriendlyError = `${source.toUpperCase()} is protected by Cloudflare. Cannot bypass security from server. Please try a different source or contact the site administrator.`;
+      let errorType = 'UNKNOWN';
+      
+      if (errorMsg.includes('CLOUDFLARE_PROTECTION') || errorMsg.includes('CLOUDFLARE') || errorMsg.includes('Cloudflare')) {
+        errorType = 'CLOUDFLARE';
+        userFriendlyError = `🛡️ الموقع ${source.toUpperCase()} محمي بـ Cloudflare ولا يمكن تجاوز الحماية من الخادم. جرب مصدر آخر.\n\n` +
+          `🛡️ ${source.toUpperCase()} is protected by Cloudflare. Cannot bypass from server. Try a different source.`;
+      } else if (errorMsg.includes('ORIGIN_SERVER_TIMEOUT') || errorMsg.includes('522')) {
+        errorType = 'TIMEOUT_522';
+        userFriendlyError = `⏱️ الموقع ${source.toUpperCase()} لا يستجيب (خطأ 522). الخادم الأصلي بطيء أو معطل. جرب لاحقاً أو استخدم مصدر آخر.\n\n` +
+          `⏱️ ${source.toUpperCase()} not responding (Error 522). Origin server is slow or down. Try later or use different source.`;
+      } else if (errorMsg.includes('CLOUDFLARE_GATEWAY_TIMEOUT') || errorMsg.includes('524')) {
+        errorType = 'TIMEOUT_524';
+        userFriendlyError = `⏱️ انتهت مهلة الاتصال مع ${source.toUpperCase()} (خطأ 524). الموقع بطيء جداً. جرب مصدر آخر.\n\n` +
+          `⏱️ Connection timeout with ${source.toUpperCase()} (Error 524). Site is too slow. Try different source.`;
+      } else if (errorMsg.includes('REQUEST_TIMEOUT') || errorMsg.includes('TIMEOUT')) {
+        errorType = 'TIMEOUT';
+        userFriendlyError = `⏱️ انتهت مهلة الطلب من ${source.toUpperCase()}. الموقع بطيء جداً أو لا يستجيب. جرب مصدر آخر.\n\n` +
+          `⏱️ Request timeout from ${source.toUpperCase()}. Site is too slow or not responding. Try different source.`;
       } else if (errorMsg.includes('403')) {
-        userFriendlyError = `${source.toUpperCase()} is blocking automated access (403 Forbidden). Try a different source.`;
+        errorType = 'BLOCKED';
+        userFriendlyError = `🚫 ${source.toUpperCase()} يحظر الوصول الآلي (خطأ 403). جرب مصدر آخر.\n\n` +
+          `🚫 ${source.toUpperCase()} is blocking automated access (Error 403). Try different source.`;
       } else if (errorMsg.includes('503')) {
-        userFriendlyError = `${source.toUpperCase()} is temporarily unavailable (503). Try again later.`;
+        errorType = 'UNAVAILABLE';
+        userFriendlyError = `❌ ${source.toUpperCase()} غير متاح مؤقتاً (خطأ 503). جرب لاحقاً.\n\n` +
+          `❌ ${source.toUpperCase()} temporarily unavailable (Error 503). Try again later.`;
       }
+      
+      console.error(`[Scrape] Error Type: ${errorType}`);
       
       await supabase
         .from('scrape_jobs')
