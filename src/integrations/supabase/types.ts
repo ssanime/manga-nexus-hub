@@ -95,19 +95,35 @@ export type Database = {
           alternative_titles: string[] | null
           artist: string | null
           author: string | null
+          banner_url: string | null
+          chapter_count: number | null
+          comments_count: number | null
+          country: string | null
           cover_url: string | null
           created_at: string
           description: string | null
+          external_links: Json | null
           favorites: number | null
+          gallery: string[] | null
           genres: string[] | null
           id: string
+          is_featured: boolean | null
+          language: string | null
+          last_modified_by: string | null
           last_scraped_at: string | null
+          publish_status: string | null
+          publisher: string | null
           rating: number | null
+          reading_direction: string | null
+          release_date: string | null
           slug: string
+          sort_order: number | null
           source: string
           source_url: string
           status: string | null
+          tags: string[] | null
           title: string
+          trailer_url: string | null
           updated_at: string
           views: number | null
           year: number | null
@@ -116,19 +132,35 @@ export type Database = {
           alternative_titles?: string[] | null
           artist?: string | null
           author?: string | null
+          banner_url?: string | null
+          chapter_count?: number | null
+          comments_count?: number | null
+          country?: string | null
           cover_url?: string | null
           created_at?: string
           description?: string | null
+          external_links?: Json | null
           favorites?: number | null
+          gallery?: string[] | null
           genres?: string[] | null
           id?: string
+          is_featured?: boolean | null
+          language?: string | null
+          last_modified_by?: string | null
           last_scraped_at?: string | null
+          publish_status?: string | null
+          publisher?: string | null
           rating?: number | null
+          reading_direction?: string | null
+          release_date?: string | null
           slug: string
+          sort_order?: number | null
           source?: string
           source_url: string
           status?: string | null
+          tags?: string[] | null
           title: string
+          trailer_url?: string | null
           updated_at?: string
           views?: number | null
           year?: number | null
@@ -137,19 +169,35 @@ export type Database = {
           alternative_titles?: string[] | null
           artist?: string | null
           author?: string | null
+          banner_url?: string | null
+          chapter_count?: number | null
+          comments_count?: number | null
+          country?: string | null
           cover_url?: string | null
           created_at?: string
           description?: string | null
+          external_links?: Json | null
           favorites?: number | null
+          gallery?: string[] | null
           genres?: string[] | null
           id?: string
+          is_featured?: boolean | null
+          language?: string | null
+          last_modified_by?: string | null
           last_scraped_at?: string | null
+          publish_status?: string | null
+          publisher?: string | null
           rating?: number | null
+          reading_direction?: string | null
+          release_date?: string | null
           slug?: string
+          sort_order?: number | null
           source?: string
           source_url?: string
           status?: string | null
+          tags?: string[] | null
           title?: string
+          trailer_url?: string | null
           updated_at?: string
           views?: number | null
           year?: number | null

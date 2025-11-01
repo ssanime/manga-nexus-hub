@@ -43,6 +43,7 @@ const Index = () => {
     const { data: popular } = await supabase
       .from('manga')
       .select('*')
+      .eq('publish_status', 'published')
       .order('created_at', { ascending: false })
       .limit(20);
     
@@ -50,6 +51,7 @@ const Index = () => {
     const { data: trending } = await supabase
       .from('manga')
       .select('*')
+      .eq('publish_status', 'published')
       .order('created_at', { ascending: false })
       .limit(20);
     

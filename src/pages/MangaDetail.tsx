@@ -86,14 +86,29 @@ const MangaDetail = () => {
 
       {/* Hero Banner */}
       <div className="relative h-[400px] overflow-hidden">
-        {manga.cover_url && (
+        {(manga.banner_url || manga.cover_url) && (
           <>
             <div 
               className="absolute inset-0 bg-cover bg-center blur-sm scale-110"
-              style={{ backgroundImage: `url(${manga.cover_url})` }}
+              style={{ backgroundImage: `url(${manga.banner_url || manga.cover_url})` }}
             />
             <div className="absolute inset-0 bg-gradient-to-t from-background via-background/80 to-transparent" />
           </>
+        )}
+        {manga.trailer_url && (
+          <div className="absolute top-4 right-4 z-10">
+            <a 
+              href={manga.trailer_url} 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 bg-primary/90 hover:bg-primary text-primary-foreground px-4 py-2 rounded-lg transition-colors"
+            >
+              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M8 5v14l11-7z"/>
+              </svg>
+              <span>مقطع ترويجي</span>
+            </a>
+          </div>
         )}
       </div>
 
@@ -147,9 +162,21 @@ const MangaDetail = () => {
                 <Heart className="h-5 w-5" />
                 <span>{formatViews(manga.favorites || 0)}</span>
               </div>
+              {manga.chapter_count !== undefined && (
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <BookOpen className="h-5 w-5" />
+                  <span>{manga.chapter_count} فصل</span>
+                </div>
+              )}
               <Badge className="bg-primary text-primary-foreground">
                 {manga.status === 'ongoing' ? 'مستمرة' : 'مكتملة'}
               </Badge>
+              {manga.is_featured && (
+                <Badge className="bg-accent text-accent-foreground">
+                  <Star className="h-3 w-3 ml-1" />
+                  مميزة
+                </Badge>
+              )}
             </div>
 
             {/* Genres */}
@@ -213,7 +240,88 @@ const MangaDetail = () => {
                     {manga.status === 'ongoing' ? 'مستمرة' : 'مكتملة'}
                   </div>
                 </div>
+                {manga.publisher && (
+                  <div>
+                    <div className="text-sm text-muted-foreground mb-1">الناشر</div>
+                    <div className="font-semibold text-foreground">{manga.publisher}</div>
+                  </div>
+                )}
+                {manga.country && (
+                  <div>
+                    <div className="text-sm text-muted-foreground mb-1">بلد الأصل</div>
+                    <div className="font-semibold text-foreground">
+                      {manga.country === 'japan' ? 'اليابان' : 
+                       manga.country === 'korea' ? 'كوريا' : 
+                       manga.country === 'china' ? 'الصين' : 'أخرى'}
+                    </div>
+                  </div>
+                )}
+                {manga.language && (
+                  <div>
+                    <div className="text-sm text-muted-foreground mb-1">اللغة</div>
+                    <div className="font-semibold text-foreground">{manga.language}</div>
+                  </div>
+                )}
+                {manga.release_date && (
+                  <div>
+                    <div className="text-sm text-muted-foreground mb-1">تاريخ الإصدار</div>
+                    <div className="font-semibold text-foreground">{formatDate(manga.release_date)}</div>
+                  </div>
+                )}
               </div>
+
+              {/* External Links */}
+              {manga.external_links && typeof manga.external_links === 'object' && !Array.isArray(manga.external_links) && (
+                <div className="mt-6 pt-6 border-t border-border">
+                  <div className="text-sm text-muted-foreground mb-3">روابط خارجية</div>
+                  <div className="flex flex-wrap gap-2">
+                    {(manga.external_links as any).mal && (
+                      <a 
+                        href={(manga.external_links as any).mal as string} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="px-3 py-1 bg-secondary hover:bg-secondary/80 rounded-md text-sm transition-colors"
+                      >
+                        MyAnimeList
+                      </a>
+                    )}
+                    {(manga.external_links as any).anilist && (
+                      <a 
+                        href={(manga.external_links as any).anilist as string} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="px-3 py-1 bg-secondary hover:bg-secondary/80 rounded-md text-sm transition-colors"
+                      >
+                        AniList
+                      </a>
+                    )}
+                    {(manga.external_links as any).official && (
+                      <a 
+                        href={(manga.external_links as any).official as string} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="px-3 py-1 bg-secondary hover:bg-secondary/80 rounded-md text-sm transition-colors"
+                      >
+                        الموقع الرسمي
+                      </a>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Tags */}
+              {manga.tags && manga.tags.length > 0 && (
+                <div className="mt-6 pt-6 border-t border-border">
+                  <div className="text-sm text-muted-foreground mb-3">الكلمات المفتاحية</div>
+                  <div className="flex flex-wrap gap-2">
+                    {manga.tags.map((tag) => (
+                      <Badge key={tag} variant="outline">
+                        {tag}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
             </Card>
           </div>
         </div>
@@ -221,9 +329,10 @@ const MangaDetail = () => {
         {/* Tabs Section */}
         <div className="mt-12 mb-12">
           <Tabs defaultValue="chapters" className="w-full">
-            <TabsList className="grid w-full max-w-md grid-cols-2">
+            <TabsList className="grid w-full max-w-md grid-cols-3">
               <TabsTrigger value="chapters">الفصول ({chapters.length})</TabsTrigger>
               <TabsTrigger value="description">الوصف</TabsTrigger>
+              <TabsTrigger value="gallery">المعرض</TabsTrigger>
             </TabsList>
             
             <TabsContent value="chapters" className="mt-6">
@@ -279,6 +388,28 @@ const MangaDetail = () => {
                   <p className="text-muted-foreground text-center">لا يوجد وصف متاح</p>
                 )}
               </Card>
+            </TabsContent>
+
+            <TabsContent value="gallery" className="mt-6">
+              {manga.gallery && manga.gallery.length > 0 ? (
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                  {manga.gallery.map((image, index) => (
+                    <Card key={index} className="overflow-hidden group cursor-pointer">
+                      <img 
+                        src={image} 
+                        alt={`${manga.title} - معرض ${index + 1}`}
+                        className="w-full h-64 object-cover transition-transform group-hover:scale-110"
+                        onClick={() => window.open(image, '_blank')}
+                      />
+                    </Card>
+                  ))}
+                </div>
+              ) : (
+                <Card className="p-8 bg-card border-border text-center">
+                  <BookOpen className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                  <p className="text-muted-foreground">لا توجد صور في المعرض</p>
+                </Card>
+              )}
             </TabsContent>
           </Tabs>
         </div>

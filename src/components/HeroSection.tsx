@@ -13,6 +13,7 @@ export const HeroSection = () => {
       const { data: manga } = await supabase
         .from("manga")
         .select("*")
+        .eq('publish_status', 'published')
         .contains("genres", ["Manga"])
         .order("views", { ascending: false })
         .limit(10);
@@ -21,6 +22,7 @@ export const HeroSection = () => {
       const { data: manhwa } = await supabase
         .from("manga")
         .select("*")
+        .eq('publish_status', 'published')
         .contains("genres", ["Manhwa"])
         .order("views", { ascending: false })
         .limit(10);
@@ -29,6 +31,7 @@ export const HeroSection = () => {
       const { data: manhua } = await supabase
         .from("manga")
         .select("*")
+        .eq('publish_status', 'published')
         .contains("genres", ["Manhua"])
         .order("views", { ascending: false })
         .limit(10);
