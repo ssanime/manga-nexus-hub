@@ -67,6 +67,52 @@ const Admin = () => {
     }
   };
 
+  const deleteJob = async (jobId: string) => {
+    const { error } = await supabase
+      .from("scrape_jobs")
+      .delete()
+      .eq("id", jobId);
+
+    if (error) {
+      toast({
+        title: "خطأ",
+        description: "فشل حذف المهمة",
+        variant: "destructive",
+      });
+    } else {
+      toast({
+        title: "نجح",
+        description: "تم حذف المهمة",
+      });
+      fetchJobs();
+    }
+  };
+
+  const clearStuckJobs = async () => {
+    // Delete jobs that are stuck in processing state for more than 10 minutes
+    const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+    
+    const { error } = await supabase
+      .from("scrape_jobs")
+      .delete()
+      .eq("status", "processing")
+      .lt("created_at", tenMinutesAgo);
+
+    if (error) {
+      toast({
+        title: "خطأ",
+        description: "فشل حذف المهام العالقة",
+        variant: "destructive",
+      });
+    } else {
+      toast({
+        title: "نجح",
+        description: "تم حذف المهام العالقة",
+      });
+      fetchJobs();
+    }
+  };
+
   const fetchManga = async () => {
     const { data, error } = await supabase
       .from("manga")
@@ -398,6 +444,26 @@ const Admin = () => {
             </TabsContent>
 
             <TabsContent value="jobs" className="space-y-4 mt-6">
+              {jobs.length > 0 && (
+                <div className="flex gap-2 mb-4">
+                  <Button
+                    onClick={clearStuckJobs}
+                    variant="outline"
+                    size="sm"
+                  >
+                    حذف المهام العالقة (أكثر من 10 دقائق)
+                  </Button>
+                  <Button
+                    onClick={fetchJobs}
+                    variant="outline"
+                    size="sm"
+                  >
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                    تحديث
+                  </Button>
+                </div>
+              )}
+              
               {jobs.length === 0 ? (
                 <Card className="p-8 text-center bg-card border-border">
                   <p className="text-muted-foreground">لا توجد مهام سحب بعد</p>
@@ -427,18 +493,28 @@ const Admin = () => {
                           {new Date(job.created_at).toLocaleString("ar-SA")}
                         </p>
                       </div>
-                      {job.status === "failed" && job.retry_count < job.max_retries && (
+                      <div className="flex gap-2">
+                        {job.status === "failed" && job.retry_count < job.max_retries && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              /* Retry logic */
+                            }}
+                          >
+                            <RefreshCw className="w-4 h-4 mr-1" />
+                            إعادة المحاولة
+                          </Button>
+                        )}
                         <Button
-                          variant="outline"
+                          variant="ghost"
                           size="sm"
-                          onClick={() => {
-                            /* Retry logic */
-                          }}
+                          onClick={() => deleteJob(job.id)}
                         >
-                          <RefreshCw className="w-4 h-4 mr-1" />
-                          إعادة المحاولة
+                          <XCircle className="w-4 h-4 mr-1" />
+                          حذف
                         </Button>
-                      )}
+                      </div>
                     </div>
                   </Card>
                 ))

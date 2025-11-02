@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -10,7 +10,6 @@ import { Switch } from "@/components/ui/switch";
 import { X, Upload, Search, Image as ImageIcon, Star } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { MANGA_GENRES } from "@/data/genres";
 
 export const AddMangaForm = ({ onSuccess }: { onSuccess: () => void }) => {
   const { toast } = useToast();
@@ -26,6 +25,8 @@ export const AddMangaForm = ({ onSuccess }: { onSuccess: () => void }) => {
   const [galleryPreviews, setGalleryPreviews] = useState<string[]>([]);
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState("");
+  const [availableGenres, setAvailableGenres] = useState<string[]>([]);
+  const [newGenre, setNewGenre] = useState("");
   
   const [formData, setFormData] = useState({
     title: "",
@@ -37,7 +38,6 @@ export const AddMangaForm = ({ onSuccess }: { onSuccess: () => void }) => {
     status: "ongoing",
     cover_url: "",
     banner_url: "",
-    trailer_url: "",
     publisher: "",
     country: "",
     release_date: "",
@@ -56,7 +56,62 @@ export const AddMangaForm = ({ onSuccess }: { onSuccess: () => void }) => {
     },
   });
 
-  const filteredGenres = MANGA_GENRES.filter(genre => 
+  useEffect(() => {
+    fetchGenres();
+  }, []);
+
+  const fetchGenres = async () => {
+    const { data, error } = await supabase
+      .from('genres')
+      .select('name')
+      .order('name');
+    
+    if (!error && data) {
+      setAvailableGenres(data.map(g => g.name));
+    }
+  };
+
+  const addNewGenre = async () => {
+    if (!newGenre.trim()) {
+      toast({
+        title: "خطأ",
+        description: "الرجاء إدخال اسم التصنيف",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (availableGenres.includes(newGenre.trim())) {
+      toast({
+        title: "تنبيه",
+        description: "هذا التصنيف موجود بالفعل",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const { error } = await supabase
+      .from('genres')
+      .insert({ name: newGenre.trim() });
+    
+    if (error) {
+      toast({
+        title: "خطأ",
+        description: "فشل إضافة التصنيف",
+        variant: "destructive",
+      });
+    } else {
+      toast({
+        title: "نجح",
+        description: "تم إضافة التصنيف بنجاح",
+      });
+      await fetchGenres();
+      setSelectedGenres([...selectedGenres, newGenre.trim()]);
+      setNewGenre("");
+    }
+  };
+
+  const filteredGenres = availableGenres.filter(genre => 
     genre.toLowerCase().includes(genreSearch.toLowerCase())
   );
 
@@ -205,7 +260,6 @@ export const AddMangaForm = ({ onSuccess }: { onSuccess: () => void }) => {
           cover_url: coverUrl || null,
           banner_url: bannerUrl || null,
           gallery: galleryUrls.length > 0 ? galleryUrls : null,
-          trailer_url: formData.trailer_url || null,
           publisher: formData.publisher || null,
           country: formData.country || null,
           release_date: formData.release_date || null,
@@ -242,7 +296,6 @@ export const AddMangaForm = ({ onSuccess }: { onSuccess: () => void }) => {
         status: "ongoing",
         cover_url: "",
         banner_url: "",
-        trailer_url: "",
         publisher: "",
         country: "",
         release_date: "",
@@ -383,17 +436,6 @@ export const AddMangaForm = ({ onSuccess }: { onSuccess: () => void }) => {
                 </div>
               )}
             </div>
-          </div>
-
-          {/* Trailer URL */}
-          <div className="space-y-2 md:col-span-2">
-            <Label>🎬 رابط المقطع الترويجي (Trailer)</Label>
-            <Input
-              value={formData.trailer_url}
-              onChange={(e) => setFormData({ ...formData, trailer_url: e.target.value })}
-              placeholder="https://youtube.com/watch?v=..."
-              dir="ltr"
-            />
           </div>
 
           {/* Title */}
@@ -567,7 +609,31 @@ export const AddMangaForm = ({ onSuccess }: { onSuccess: () => void }) => {
 
           {/* Genres */}
           <div className="space-y-2 md:col-span-2">
-            <Label>التصنيفات ({MANGA_GENRES.length} تصنيف متاح)</Label>
+            <Label>التصنيفات ({availableGenres.length} تصنيف متاح)</Label>
+            
+            {/* Add new genre */}
+            <div className="flex gap-2 mb-3 p-3 bg-primary/5 rounded-lg border border-primary/20">
+              <Input
+                placeholder="إضافة تصنيف جديد..."
+                value={newGenre}
+                onChange={(e) => setNewGenre(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    addNewGenre();
+                  }
+                }}
+              />
+              <Button
+                type="button"
+                onClick={addNewGenre}
+                variant="default"
+                className="whitespace-nowrap"
+              >
+                إضافة تصنيف
+              </Button>
+            </div>
+
             <div className="relative">
               <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input

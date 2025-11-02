@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -6,8 +6,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { X, Search, Filter, ChevronDown, ChevronUp } from "lucide-react";
-import { MANGA_GENRES, STATUS_OPTIONS, SORT_OPTIONS, YEARS } from "@/data/genres";
+import { STATUS_OPTIONS, SORT_OPTIONS, YEARS } from "@/data/genres";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { supabase } from "@/integrations/supabase/client";
 
 interface AdvancedFiltersProps {
   onFilterChange: (filters: FilterState) => void;
@@ -34,6 +35,22 @@ export const AdvancedFilters = ({ onFilterChange }: AdvancedFiltersProps) => {
   
   const [isOpen, setIsOpen] = useState(false);
   const [genreSearch, setGenreSearch] = useState("");
+  const [availableGenres, setAvailableGenres] = useState<string[]>([]);
+
+  useEffect(() => {
+    fetchGenres();
+  }, []);
+
+  const fetchGenres = async () => {
+    const { data, error } = await supabase
+      .from('genres')
+      .select('name')
+      .order('name');
+    
+    if (!error && data) {
+      setAvailableGenres(data.map(g => g.name));
+    }
+  };
 
   const updateFilters = (newFilters: Partial<FilterState>) => {
     const updated = { ...filters, ...newFilters };
@@ -64,7 +81,7 @@ export const AdvancedFilters = ({ onFilterChange }: AdvancedFiltersProps) => {
     onFilterChange(defaultFilters);
   };
 
-  const filteredGenres = MANGA_GENRES.filter(genre => 
+  const filteredGenres = availableGenres.filter(genre => 
     genre.toLowerCase().includes(genreSearch.toLowerCase())
   );
 
