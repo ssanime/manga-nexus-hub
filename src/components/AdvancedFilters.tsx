@@ -136,12 +136,12 @@ export const AdvancedFilters = ({ onFilterChange }: AdvancedFiltersProps) => {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label>الحالة</Label>
-                <Select value={filters.status} onValueChange={(value) => updateFilters({ status: value })}>
+                <Select value={filters.status || "all"} onValueChange={(value) => updateFilters({ status: value === "all" ? "" : value })}>
                   <SelectTrigger>
                     <SelectValue placeholder="الكل" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">الكل</SelectItem>
+                    <SelectItem value="all">الكل</SelectItem>
                     {STATUS_OPTIONS.map(option => (
                       <SelectItem key={option.value} value={option.value}>
                         {option.label}
@@ -153,12 +153,12 @@ export const AdvancedFilters = ({ onFilterChange }: AdvancedFiltersProps) => {
 
               <div className="space-y-2">
                 <Label>السنة</Label>
-                <Select value={filters.year} onValueChange={(value) => updateFilters({ year: value })}>
+                <Select value={filters.year || "all"} onValueChange={(value) => updateFilters({ year: value === "all" ? "" : value })}>
                   <SelectTrigger>
                     <SelectValue placeholder="الكل" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">الكل</SelectItem>
+                    <SelectItem value="all">الكل</SelectItem>
                     {YEARS.map(year => (
                       <SelectItem key={year} value={year.toString()}>
                         {year}
