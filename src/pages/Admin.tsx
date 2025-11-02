@@ -6,13 +6,14 @@ import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Database, Download, RefreshCw, CheckCircle, XCircle, Clock, Plus, BookPlus, Globe } from "lucide-react";
+import { Database, Download, RefreshCw, CheckCircle, XCircle, Clock, Plus, BookPlus, Globe, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { AddMangaForm } from "@/components/admin/AddMangaForm";
 import { AddChapterForm } from "@/components/admin/AddChapterForm";
 import { SourcesManager } from "@/components/admin/SourcesManager";
 import { ScrapeFromURL } from "@/components/admin/ScrapeFromURL";
 import { CloudflareNotice } from "@/components/admin/CloudflareNotice";
+import { TeamsManager } from "@/components/admin/TeamsManager";
 import { useNavigate } from "react-router-dom";
 
 const Admin = () => {
@@ -268,10 +269,14 @@ const Admin = () => {
 
           {/* Tabs */}
           <Tabs defaultValue="manga" className="w-full">
-            <TabsList className="grid w-full max-w-6xl grid-cols-7">
+            <TabsList className="grid w-full max-w-6xl grid-cols-8">
               <TabsTrigger value="manga">مانجا</TabsTrigger>
               <TabsTrigger value="manhwa">مانهوا</TabsTrigger>
               <TabsTrigger value="manhua">مانها</TabsTrigger>
+              <TabsTrigger value="teams">
+                <Users className="w-4 h-4 mr-2" />
+                الفرق
+              </TabsTrigger>
               <TabsTrigger value="sources">
                 <Globe className="w-4 h-4 mr-2" />
                 المصادر
@@ -408,6 +413,11 @@ const Admin = () => {
                   </div>
                 )}
               </div>
+            </TabsContent>
+
+            {/* Teams Tab */}
+            <TabsContent value="teams" className="mt-6">
+              <TeamsManager />
             </TabsContent>
 
             {/* Sources Tab */}

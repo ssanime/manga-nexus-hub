@@ -27,6 +27,7 @@ export const AddMangaForm = ({ onSuccess }: { onSuccess: () => void }) => {
   const [tagInput, setTagInput] = useState("");
   const [availableGenres, setAvailableGenres] = useState<string[]>([]);
   const [newGenre, setNewGenre] = useState("");
+  const [userTeams, setUserTeams] = useState<any[]>([]);
   
   const [formData, setFormData] = useState({
     title: "",
@@ -49,6 +50,7 @@ export const AddMangaForm = ({ onSuccess }: { onSuccess: () => void }) => {
     is_featured: false,
     publish_status: "published",
     sort_order: "0",
+    team_id: "",
     external_links: {
       mal: "",
       anilist: "",
@@ -58,7 +60,28 @@ export const AddMangaForm = ({ onSuccess }: { onSuccess: () => void }) => {
 
   useEffect(() => {
     fetchGenres();
+    fetchUserTeams();
   }, []);
+
+  const fetchUserTeams = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    if (user) {
+      const { data } = await supabase
+        .from('team_members')
+        .select(`
+          team_id,
+          role,
+          teams (id, name, slug)
+        `)
+        .eq('user_id', user.id)
+        .in('role', ['leader', 'manager']);
+      
+      if (data) {
+        setUserTeams(data.map((tm: any) => tm.teams).filter(Boolean));
+      }
+    }
+  };
 
   const fetchGenres = async () => {
     const { data, error } = await supabase
@@ -274,6 +297,7 @@ export const AddMangaForm = ({ onSuccess }: { onSuccess: () => void }) => {
           is_featured: formData.is_featured,
           publish_status: formData.publish_status,
           sort_order: parseInt(formData.sort_order),
+          team_id: formData.team_id || null,
           external_links: formData.external_links,
           last_modified_by: user?.id,
         });
@@ -307,6 +331,7 @@ export const AddMangaForm = ({ onSuccess }: { onSuccess: () => void }) => {
         is_featured: false,
         publish_status: "published",
         sort_order: "0",
+        team_id: "",
         external_links: { mal: "", anilist: "", official: "" },
       });
       setCoverFile(null);
@@ -606,6 +631,26 @@ export const AddMangaForm = ({ onSuccess }: { onSuccess: () => void }) => {
               </SelectContent>
             </Select>
           </div>
+
+          {/* Team Selection */}
+          {userTeams.length > 0 && (
+            <div className="space-y-2 md:col-span-2">
+              <Label>👥 الفريق (اختياري)</Label>
+              <Select value={formData.team_id} onValueChange={(value) => setFormData({ ...formData, team_id: value })}>
+                <SelectTrigger>
+                  <SelectValue placeholder="اختر الفريق أو اترك فارغاً" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">بدون فريق</SelectItem>
+                  {userTeams.map((team) => (
+                    <SelectItem key={team.id} value={team.id}>
+                      {team.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
           {/* Genres */}
           <div className="space-y-2 md:col-span-2">

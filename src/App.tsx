@@ -12,6 +12,10 @@ import Profile from "./pages/Profile";
 import Manga from "./pages/Manga";
 import Manhwa from "./pages/Manhwa";
 import Manhua from "./pages/Manhua";
+import Teams from "./pages/Teams";
+import CreateTeam from "./pages/CreateTeam";
+import TeamDetail from "./pages/TeamDetail";
+import TeamDashboard from "./pages/TeamDashboard";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -32,6 +36,10 @@ const App = () => (
           <Route path="/auth" element={<Auth />} />
           <Route path="/admin" element={<Admin />} />
           <Route path="/profile" element={<Profile />} />
+          <Route path="/teams" element={<Teams />} />
+          <Route path="/teams/create" element={<CreateTeam />} />
+          <Route path="/teams/:slug" element={<TeamDetail />} />
+          <Route path="/teams/:slug/dashboard" element={<TeamDashboard />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>

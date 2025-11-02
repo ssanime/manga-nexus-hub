@@ -54,6 +54,7 @@ export type Database = {
           manga_id: string
           release_date: string | null
           source_url: string
+          team_id: string | null
           title: string | null
           updated_at: string
           views: number | null
@@ -65,6 +66,7 @@ export type Database = {
           manga_id: string
           release_date?: string | null
           source_url: string
+          team_id?: string | null
           title?: string | null
           updated_at?: string
           views?: number | null
@@ -76,6 +78,7 @@ export type Database = {
           manga_id?: string
           release_date?: string | null
           source_url?: string
+          team_id?: string | null
           title?: string | null
           updated_at?: string
           views?: number | null
@@ -86,6 +89,13 @@ export type Database = {
             columns: ["manga_id"]
             isOneToOne: false
             referencedRelation: "manga"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chapters_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
             referencedColumns: ["id"]
           },
         ]
@@ -140,6 +150,7 @@ export type Database = {
           source_url: string
           status: string | null
           tags: string[] | null
+          team_id: string | null
           title: string
           trailer_url: string | null
           updated_at: string
@@ -177,6 +188,7 @@ export type Database = {
           source_url: string
           status?: string | null
           tags?: string[] | null
+          team_id?: string | null
           title: string
           trailer_url?: string | null
           updated_at?: string
@@ -214,13 +226,22 @@ export type Database = {
           source_url?: string
           status?: string | null
           tags?: string[] | null
+          team_id?: string | null
           title?: string
           trailer_url?: string | null
           updated_at?: string
           views?: number | null
           year?: number | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "manga_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       profiles: {
         Row: {
@@ -335,6 +356,118 @@ export type Database = {
         }
         Relationships: []
       }
+      team_join_requests: {
+        Row: {
+          created_at: string
+          id: string
+          message: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: Database["public"]["Enums"]["join_request_status"]
+          team_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          message?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: Database["public"]["Enums"]["join_request_status"]
+          team_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          message?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: Database["public"]["Enums"]["join_request_status"]
+          team_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "team_join_requests_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      team_members: {
+        Row: {
+          id: string
+          joined_at: string
+          role: Database["public"]["Enums"]["team_role"]
+          team_id: string
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          joined_at?: string
+          role?: Database["public"]["Enums"]["team_role"]
+          team_id: string
+          user_id: string
+        }
+        Update: {
+          id?: string
+          joined_at?: string
+          role?: Database["public"]["Enums"]["team_role"]
+          team_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "team_members_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      teams: {
+        Row: {
+          created_at: string
+          created_by: string
+          description: string | null
+          id: string
+          join_requirements: string | null
+          logo_url: string | null
+          name: string
+          slug: string
+          status: Database["public"]["Enums"]["team_status"]
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          description?: string | null
+          id?: string
+          join_requirements?: string | null
+          logo_url?: string | null
+          name: string
+          slug: string
+          status?: Database["public"]["Enums"]["team_status"]
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          description?: string | null
+          id?: string
+          join_requirements?: string | null
+          logo_url?: string | null
+          name?: string
+          slug?: string
+          status?: Database["public"]["Enums"]["team_status"]
+          updated_at?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           created_at: string | null
@@ -371,6 +504,9 @@ export type Database = {
     }
     Enums: {
       app_role: "admin" | "moderator" | "user"
+      join_request_status: "pending" | "approved" | "rejected"
+      team_role: "leader" | "manager" | "member"
+      team_status: "pending" | "approved" | "rejected"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -499,6 +635,9 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "moderator", "user"],
+      join_request_status: ["pending", "approved", "rejected"],
+      team_role: ["leader", "manager", "member"],
+      team_status: ["pending", "approved", "rejected"],
     },
   },
 } as const
