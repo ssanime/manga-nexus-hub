@@ -243,6 +243,35 @@ export type Database = {
           },
         ]
       }
+      manga_favorites: {
+        Row: {
+          created_at: string
+          id: string
+          manga_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          manga_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          manga_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "manga_favorites_manga_id_fkey"
+            columns: ["manga_id"]
+            isOneToOne: false
+            referencedRelation: "manga"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -272,6 +301,54 @@ export type Database = {
           username?: string | null
         }
         Relationships: []
+      }
+      reading_history: {
+        Row: {
+          chapter_id: string
+          completed: boolean | null
+          created_at: string
+          id: string
+          last_page_read: number | null
+          manga_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          chapter_id: string
+          completed?: boolean | null
+          created_at?: string
+          id?: string
+          last_page_read?: number | null
+          manga_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          chapter_id?: string
+          completed?: boolean | null
+          created_at?: string
+          id?: string
+          last_page_read?: number | null
+          manga_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reading_history_chapter_id_fkey"
+            columns: ["chapter_id"]
+            isOneToOne: false
+            referencedRelation: "chapters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reading_history_manga_id_fkey"
+            columns: ["manga_id"]
+            isOneToOne: false
+            referencedRelation: "manga"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       scrape_jobs: {
         Row: {
@@ -359,30 +436,36 @@ export type Database = {
       team_join_requests: {
         Row: {
           created_at: string
+          custom_answers: Json | null
           id: string
           message: string | null
           reviewed_at: string | null
           reviewed_by: string | null
+          sample_chapter_url: string | null
           status: Database["public"]["Enums"]["join_request_status"]
           team_id: string
           user_id: string
         }
         Insert: {
           created_at?: string
+          custom_answers?: Json | null
           id?: string
           message?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
+          sample_chapter_url?: string | null
           status?: Database["public"]["Enums"]["join_request_status"]
           team_id: string
           user_id: string
         }
         Update: {
           created_at?: string
+          custom_answers?: Json | null
           id?: string
           message?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
+          sample_chapter_url?: string | null
           status?: Database["public"]["Enums"]["join_request_status"]
           team_id?: string
           user_id?: string
@@ -433,11 +516,14 @@ export type Database = {
         Row: {
           created_at: string
           created_by: string
+          custom_questions: Json | null
           description: string | null
           id: string
           join_requirements: string | null
           logo_url: string | null
           name: string
+          require_sample_chapter: boolean | null
+          sample_chapter_instructions: string | null
           slug: string
           status: Database["public"]["Enums"]["team_status"]
           updated_at: string
@@ -445,11 +531,14 @@ export type Database = {
         Insert: {
           created_at?: string
           created_by: string
+          custom_questions?: Json | null
           description?: string | null
           id?: string
           join_requirements?: string | null
           logo_url?: string | null
           name: string
+          require_sample_chapter?: boolean | null
+          sample_chapter_instructions?: string | null
           slug: string
           status?: Database["public"]["Enums"]["team_status"]
           updated_at?: string
@@ -457,11 +546,14 @@ export type Database = {
         Update: {
           created_at?: string
           created_by?: string
+          custom_questions?: Json | null
           description?: string | null
           id?: string
           join_requirements?: string | null
           logo_url?: string | null
           name?: string
+          require_sample_chapter?: boolean | null
+          sample_chapter_instructions?: string | null
           slug?: string
           status?: Database["public"]["Enums"]["team_status"]
           updated_at?: string

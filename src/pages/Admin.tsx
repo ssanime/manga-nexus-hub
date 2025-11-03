@@ -14,6 +14,7 @@ import { SourcesManager } from "@/components/admin/SourcesManager";
 import { ScrapeFromURL } from "@/components/admin/ScrapeFromURL";
 import { CloudflareNotice } from "@/components/admin/CloudflareNotice";
 import { TeamsManager } from "@/components/admin/TeamsManager";
+import { MangaManager } from "@/components/admin/MangaManager";
 import { useNavigate } from "react-router-dom";
 
 const Admin = () => {
@@ -270,30 +271,19 @@ const Admin = () => {
           {/* Tabs */}
           <Tabs defaultValue="manga" className="w-full">
             <TabsList className="grid w-full max-w-6xl grid-cols-8">
+              <TabsTrigger value="manage">إدارة المانجا</TabsTrigger>
               <TabsTrigger value="manga">مانجا</TabsTrigger>
               <TabsTrigger value="manhwa">مانهوا</TabsTrigger>
               <TabsTrigger value="manhua">مانها</TabsTrigger>
-              <TabsTrigger value="teams">
-                <Users className="w-4 h-4 mr-2" />
-                الفرق
-              </TabsTrigger>
-              <TabsTrigger value="sources">
-                <Globe className="w-4 h-4 mr-2" />
-                المصادر
-              </TabsTrigger>
-              <TabsTrigger value="add-manga">
-                <Plus className="w-4 h-4 mr-2" />
-                إضافة
-              </TabsTrigger>
-              <TabsTrigger value="add-chapter">
-                <BookPlus className="w-4 h-4 mr-2" />
-                فصل
-              </TabsTrigger>
-              <TabsTrigger value="jobs">
-                <Database className="w-4 h-4 mr-2" />
-                المهام
-              </TabsTrigger>
+              <TabsTrigger value="teams"><Users className="w-4 h-4 mr-2" />الفرق</TabsTrigger>
+              <TabsTrigger value="add-manga"><Plus className="w-4 h-4 mr-2" />إضافة</TabsTrigger>
+              <TabsTrigger value="add-chapter"><BookPlus className="w-4 h-4 mr-2" />فصل</TabsTrigger>
+              <TabsTrigger value="jobs"><Database className="w-4 h-4 mr-2" />المهام</TabsTrigger>
             </TabsList>
+
+            <TabsContent value="manage" className="mt-6">
+              <MangaManager />
+            </TabsContent>
             
             {/* Manga Tab */}
             <TabsContent value="manga" className="mt-6">

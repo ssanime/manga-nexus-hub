@@ -3,11 +3,89 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Star, BookOpen, Eye, Heart, Share2, Clock, Loader2 } from "lucide-react";
+import { Star, BookOpen, Eye, Heart, Share2, Clock, Loader2, Image as ImageIcon } from "lucide-react";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+
+interface ChapterCardProps {
+  chapter: any;
+  mangaSlug: string;
+  formatDate: (date: string | null) => string;
+  formatViews: (views: number) => string;
+}
+
+const ChapterCard = ({ chapter, mangaSlug, formatDate, formatViews }: ChapterCardProps) => {
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
+  
+  useEffect(() => {
+    const fetchPreviewImage = async () => {
+      const { data } = await supabase
+        .from("chapter_pages")
+        .select("image_url")
+        .eq("chapter_id", chapter.id)
+        .order("page_number", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      
+      if (data?.image_url) {
+        setPreviewImage(data.image_url);
+      }
+    };
+    
+    fetchPreviewImage();
+  }, [chapter.id]);
+
+  return (
+    <Link to={`/read/${mangaSlug}/${chapter.chapter_number}`}>
+      <Card className="overflow-hidden hover:bg-secondary/50 transition-all cursor-pointer border-border group hover:border-primary/50">
+        <div className="flex gap-4 p-4">
+          {/* Preview Image */}
+          <div className="relative w-20 h-28 flex-shrink-0 overflow-hidden rounded-md bg-secondary">
+            {previewImage ? (
+              <img
+                src={previewImage}
+                alt={`الفصل ${chapter.chapter_number}`}
+                className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110"
+              />
+            ) : (
+              <div className="h-full w-full flex items-center justify-center">
+                <ImageIcon className="h-8 w-8 text-muted-foreground" />
+              </div>
+            )}
+          </div>
+
+          {/* Chapter Info */}
+          <div className="flex-1 flex flex-col justify-between">
+            <div>
+              <div className="bg-primary/10 w-fit p-2 rounded-lg group-hover:bg-primary/20 transition-colors mb-2">
+                <BookOpen className="h-4 w-4 text-primary" />
+              </div>
+              <h3 className="font-semibold text-foreground group-hover:text-primary transition-colors">
+                الفصل {chapter.chapter_number}
+              </h3>
+              {chapter.title && (
+                <p className="text-sm text-muted-foreground line-clamp-1">{chapter.title}</p>
+              )}
+            </div>
+            
+            <div className="flex items-center gap-4 text-xs text-muted-foreground mt-2">
+              <div className="flex items-center gap-1">
+                <Eye className="h-3 w-3" />
+                <span>{formatViews(chapter.views || 0)}</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <Clock className="h-3 w-3" />
+                <span>{formatDate(chapter.release_date)}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </Card>
+    </Link>
+  );
+};
 
 const MangaDetail = () => {
   const { id } = useParams();
@@ -337,37 +415,15 @@ const MangaDetail = () => {
             
             <TabsContent value="chapters" className="mt-6">
               {chapters.length > 0 ? (
-                <div className="space-y-2">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {chapters.map((chapter) => (
-                    <Link key={chapter.id} to={`/read/${manga.slug}/${chapter.chapter_number}`}>
-                      <Card className="p-4 hover:bg-secondary/50 transition-colors cursor-pointer border-border group">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-4">
-                            <div className="bg-primary/10 p-3 rounded-lg group-hover:bg-primary/20 transition-colors">
-                              <BookOpen className="h-5 w-5 text-primary" />
-                            </div>
-                            <div>
-                              <h3 className="font-semibold text-foreground group-hover:text-primary transition-colors">
-                                الفصل {chapter.chapter_number}
-                              </h3>
-                              {chapter.title && (
-                                <p className="text-sm text-muted-foreground">{chapter.title}</p>
-                              )}
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-6 text-muted-foreground">
-                            <div className="flex items-center gap-2">
-                              <Clock className="h-4 w-4" />
-                              <span className="text-sm">{formatDate(chapter.release_date)}</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <Eye className="h-4 w-4" />
-                              <span className="text-sm">{formatViews(chapter.views || 0)}</span>
-                            </div>
-                          </div>
-                        </div>
-                      </Card>
-                    </Link>
+                    <ChapterCard 
+                      key={chapter.id}
+                      chapter={chapter}
+                      mangaSlug={manga.slug}
+                      formatDate={formatDate}
+                      formatViews={formatViews}
+                    />
                   ))}
                 </div>
               ) : (

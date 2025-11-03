@@ -7,7 +7,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useParams, useNavigate } from "react-router-dom";
-import { Users, CheckCircle, XCircle, Shield, Crown } from "lucide-react";
+import { Users, CheckCircle, XCircle, Shield, Crown, Plus, BookPlus } from "lucide-react";
+import { AddMangaForm } from "@/components/admin/AddMangaForm";
+import { AddChapterForm } from "@/components/admin/AddChapterForm";
 
 export default function TeamDashboard() {
   const { slug } = useParams();
@@ -238,12 +240,16 @@ export default function TeamDashboard() {
           </div>
 
           <Tabs defaultValue="requests" className="w-full">
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="requests">
-                طلبات الانضمام ({joinRequests.length})
+            <TabsList className="grid w-full max-w-4xl grid-cols-4">
+              <TabsTrigger value="requests">طلبات الانضمام ({joinRequests.length})</TabsTrigger>
+              <TabsTrigger value="members">الأعضاء ({members.length})</TabsTrigger>
+              <TabsTrigger value="add-manga">
+                <Plus className="w-4 h-4 mr-2" />
+                إضافة مانجا
               </TabsTrigger>
-              <TabsTrigger value="members">
-                الأعضاء ({members.length})
+              <TabsTrigger value="add-chapter">
+                <BookPlus className="w-4 h-4 mr-2" />
+                إضافة فصل
               </TabsTrigger>
             </TabsList>
 
@@ -369,6 +375,26 @@ export default function TeamDashboard() {
                     </div>
                   </Card>
                 ))}
+              </div>
+            </TabsContent>
+
+            <TabsContent value="add-manga" className="mt-6">
+              <div className="space-y-4">
+                <div>
+                  <h2 className="text-2xl font-bold text-foreground mb-2">إضافة مانجا للفريق</h2>
+                  <p className="text-muted-foreground">أضف مانجا جديدة باسم فريق {team?.name}</p>
+                </div>
+                <AddMangaForm onSuccess={() => team && fetchData(team.id)} />
+              </div>
+            </TabsContent>
+
+            <TabsContent value="add-chapter" className="mt-6">
+              <div className="space-y-4">
+                <div>
+                  <h2 className="text-2xl font-bold text-foreground mb-2">إضافة فصل للفريق</h2>
+                  <p className="text-muted-foreground">أضف فصل جديد باسم فريق {team?.name}</p>
+                </div>
+                <AddChapterForm onSuccess={() => team && fetchData(team.id)} />
               </div>
             </TabsContent>
           </Tabs>
