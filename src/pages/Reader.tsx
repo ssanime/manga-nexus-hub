@@ -1,44 +1,147 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ChevronLeft, ChevronRight, Home, List, Settings, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Home, List, X, Loader2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/components/ui/use-toast";
 
 const Reader = () => {
   const { mangaId, chapterId } = useParams();
   const navigate = useNavigate();
+  const { toast } = useToast();
   const [showControls, setShowControls] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const [manga, setManga] = useState<any>(null);
+  const [chapter, setChapter] = useState<any>(null);
+  const [pages, setPages] = useState<string[]>([]);
+  const [allChapters, setAllChapters] = useState<any[]>([]);
 
-  // Mock data - will be replaced with real data
-  const chapterNumber = Number(chapterId) || 1;
-  const chapter = {
-    mangaId: mangaId || "1",
-    chapterNumber: chapterNumber,
-    title: "نحو الشجرة على ذلك التل",
-    mangaTitle: "هجوم العمالقة",
-    pages: [
-      "https://images.unsplash.com/photo-1618519764620-7403abdbdfe9?w=800&h=1200&fit=crop",
-      "https://images.unsplash.com/photo-1612178537253-bccd437b730e?w=800&h=1200&fit=crop",
-      "https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=800&h=1200&fit=crop",
-      "https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&h=1200&fit=crop",
-      "https://images.unsplash.com/photo-1601645191163-3fc0d5d64e35?w=800&h=1200&fit=crop",
-    ],
-    prevChapter: chapterNumber > 1 ? chapterNumber - 1 : null,
-    nextChapter: chapterNumber < 139 ? chapterNumber + 1 : null,
+  useEffect(() => {
+    loadChapterData();
+  }, [mangaId, chapterId]);
+
+  const loadChapterData = async () => {
+    try {
+      setLoading(true);
+      
+      // Get manga info
+      const { data: mangaData, error: mangaError } = await supabase
+        .from('manga')
+        .select('*')
+        .eq('slug', mangaId)
+        .single();
+
+      if (mangaError || !mangaData) {
+        toast({
+          title: "خطأ",
+          description: "لم يتم العثور على المانجا",
+          variant: "destructive",
+        });
+        navigate('/404');
+        return;
+      }
+
+      setManga(mangaData);
+
+      // Get all chapters for navigation
+      const { data: chaptersData, error: chaptersError } = await supabase
+        .from('chapters')
+        .select('*')
+        .eq('manga_id', mangaData.id)
+        .order('chapter_number', { ascending: true });
+
+      if (chaptersError) {
+        console.error('Error loading chapters:', chaptersError);
+      } else {
+        setAllChapters(chaptersData || []);
+      }
+
+      // Get current chapter
+      const { data: chapterData, error: chapterError } = await supabase
+        .from('chapters')
+        .select('*')
+        .eq('manga_id', mangaData.id)
+        .eq('chapter_number', Number(chapterId))
+        .single();
+
+      if (chapterError || !chapterData) {
+        toast({
+          title: "خطأ",
+          description: "لم يتم العثور على الفصل",
+          variant: "destructive",
+        });
+        navigate(`/manga/${mangaId}`);
+        return;
+      }
+
+      setChapter(chapterData);
+
+      // Get chapter pages
+      const { data: pagesData, error: pagesError } = await supabase
+        .from('chapter_pages')
+        .select('*')
+        .eq('chapter_id', chapterData.id)
+        .order('page_number', { ascending: true });
+
+      if (pagesError) {
+        console.error('Error loading pages:', pagesError);
+        toast({
+          title: "خطأ",
+          description: "فشل تحميل صفحات الفصل",
+          variant: "destructive",
+        });
+      } else {
+        setPages(pagesData?.map(p => p.image_url) || []);
+      }
+    } catch (error) {
+      console.error('Error loading chapter data:', error);
+      toast({
+        title: "خطأ",
+        description: "حدث خطأ أثناء تحميل الفصل",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handlePrevChapter = () => {
-    if (chapter.prevChapter) {
-      navigate(`/read/${mangaId}/${chapter.prevChapter}`);
+    const currentIndex = allChapters.findIndex(c => c.id === chapter?.id);
+    if (currentIndex > 0) {
+      const prevChapter = allChapters[currentIndex - 1];
+      navigate(`/read/${mangaId}/${prevChapter.chapter_number}`);
     }
   };
 
   const handleNextChapter = () => {
-    if (chapter.nextChapter) {
-      navigate(`/read/${mangaId}/${chapter.nextChapter}`);
+    const currentIndex = allChapters.findIndex(c => c.id === chapter?.id);
+    if (currentIndex < allChapters.length - 1) {
+      const nextChapter = allChapters[currentIndex + 1];
+      navigate(`/read/${mangaId}/${nextChapter.chapter_number}`);
     }
   };
+
+  const handleChapterSelect = (value: string) => {
+    navigate(`/read/${mangaId}/${value}`);
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (!manga || !chapter) {
+    return null;
+  }
+
+  const currentIndex = allChapters.findIndex(c => c.id === chapter.id);
+  const hasPrevChapter = currentIndex > 0;
+  const hasNextChapter = currentIndex < allChapters.length - 1;
 
   return (
     <div className="min-h-screen bg-black">
@@ -57,20 +160,23 @@ const Reader = () => {
                 </Button>
               </Link>
               <div>
-                <h1 className="text-white font-bold text-lg">{chapter.mangaTitle}</h1>
-                <p className="text-gray-400 text-sm">الفصل {chapter.chapterNumber}: {chapter.title}</p>
+                <h1 className="text-white font-bold text-lg">{manga.title}</h1>
+                <p className="text-gray-400 text-sm">
+                  الفصل {chapter.chapter_number}
+                  {chapter.title && `: ${chapter.title}`}
+                </p>
               </div>
             </div>
 
             <div className="flex items-center gap-2">
-              <Select defaultValue={String(chapter.chapterNumber)}>
+              <Select value={String(chapter.chapter_number)} onValueChange={handleChapterSelect}>
                 <SelectTrigger className="w-40 bg-white/10 border-white/20 text-white">
                   <SelectValue placeholder="اختر فصل" />
                 </SelectTrigger>
                 <SelectContent>
-                  {Array.from({ length: 139 }, (_, i) => i + 1).map((num) => (
-                    <SelectItem key={num} value={String(num)}>
-                      الفصل {num}
+                  {allChapters.map((ch) => (
+                    <SelectItem key={ch.id} value={String(ch.chapter_number)}>
+                      الفصل {ch.chapter_number}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -98,28 +204,34 @@ const Reader = () => {
         onClick={() => setShowControls(!showControls)}
       >
         <div className="max-w-4xl w-full space-y-0">
-          {chapter.pages.map((page, index) => (
-            <img
-              key={index}
-              src={page}
-              alt={`الصفحة ${index + 1}`}
-              className="w-full h-auto"
-              loading={index > 2 ? "lazy" : "eager"}
-            />
-          ))}
+          {pages.length > 0 ? (
+            pages.map((page, index) => (
+              <img
+                key={index}
+                src={page}
+                alt={`الصفحة ${index + 1}`}
+                className="w-full h-auto"
+                loading={index > 2 ? "lazy" : "eager"}
+              />
+            ))
+          ) : (
+            <div className="text-center py-20">
+              <p className="text-white text-xl">لا توجد صفحات متاحة لهذا الفصل</p>
+            </div>
+          )}
         </div>
 
         {/* End of Chapter Card */}
         <Card className="max-w-4xl w-full mt-8 p-8 bg-card border-border">
           <div className="text-center space-y-6">
             <h2 className="text-2xl font-bold text-foreground">
-              نهاية الفصل {chapter.chapterNumber}
+              نهاية الفصل {chapter.chapter_number}
             </h2>
             <p className="text-muted-foreground">
               هل استمتعت بهذا الفصل؟ تابع القراءة!
             </p>
             <div className="flex gap-4 justify-center">
-              {chapter.prevChapter && (
+              {hasPrevChapter && (
                 <Button 
                   onClick={handlePrevChapter}
                   variant="outline"
@@ -129,7 +241,7 @@ const Reader = () => {
                   الفصل السابق
                 </Button>
               )}
-              {chapter.nextChapter && (
+              {hasNextChapter && (
                 <Button 
                   onClick={handleNextChapter}
                   className="flex items-center gap-2 bg-primary hover:bg-primary/90 shadow-manga-glow"
@@ -158,7 +270,7 @@ const Reader = () => {
           <div className="flex items-center justify-between">
             <Button 
               onClick={handlePrevChapter}
-              disabled={!chapter.prevChapter}
+              disabled={!hasPrevChapter}
               variant="outline"
               className="text-white border-white/20 hover:bg-white/10 disabled:opacity-50"
             >
@@ -167,12 +279,12 @@ const Reader = () => {
             </Button>
 
             <div className="text-white text-sm">
-              الصفحة 1 من {chapter.pages.length}
+              {pages.length > 0 ? `${pages.length} صفحة` : 'لا توجد صفحات'}
             </div>
 
             <Button 
               onClick={handleNextChapter}
-              disabled={!chapter.nextChapter}
+              disabled={!hasNextChapter}
               className="bg-primary hover:bg-primary/90 disabled:opacity-50"
             >
               التالي

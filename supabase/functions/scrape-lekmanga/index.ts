@@ -246,23 +246,35 @@ async function fetchHTML(url: string, config: any, retryCount = 0): Promise<stri
 
     const html = await response.text();
     
-    // Advanced Cloudflare detection
-    const cfPatterns = [
+    // Advanced Cloudflare detection - more specific patterns
+    // Only detect actual Cloudflare challenges, not just mentions of Cloudflare
+    const cfChallengePatterns = [
       'cf-browser-verification',
       'challenge-platform', 
       'cf_challenge',
       'just a moment',
       'checking your browser',
-      'cloudflare',
-      'ray id',
-      '__cf_chl_jschl_tk__'
+      '__cf_chl_jschl_tk__',
+      'cf-challenge-running'
     ];
     
     const lowerHtml = html.toLowerCase();
-    const detectedPatterns = cfPatterns.filter(p => lowerHtml.includes(p));
     
-    if (detectedPatterns.length > 0) {
-      console.error(`[Fetch] Cloudflare detected: ${detectedPatterns.join(', ')}`);
+    // Check for actual Cloudflare challenge indicators
+    // Must have both a challenge pattern AND actual challenge elements
+    const hasChallengePattern = cfChallengePatterns.some(p => lowerHtml.includes(p));
+    const hasChallengeElements = (
+      lowerHtml.includes('<title>just a moment') || 
+      lowerHtml.includes('enable javascript and cookies') ||
+      (lowerHtml.includes('cloudflare') && (
+        lowerHtml.includes('ray id') || 
+        lowerHtml.includes('performance & security by')
+      ))
+    );
+    
+    if (hasChallengePattern || hasChallengeElements) {
+      const detectedPatterns = cfChallengePatterns.filter(p => lowerHtml.includes(p));
+      console.error(`[Fetch] Cloudflare challenge detected: ${detectedPatterns.join(', ')}`);
       throw new Error('CLOUDFLARE_CHALLENGE');
     }
     
