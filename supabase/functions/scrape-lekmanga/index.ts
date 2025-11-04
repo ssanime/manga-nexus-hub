@@ -424,8 +424,27 @@ function smartExtractGenres(doc: any, selectors: string[]): string[] {
 }
 
 function extractSlug(url: string): string {
-  const match = url.match(/\/manga\/([^\/\?#]+)/);
-  return match ? match[1] : '';
+  // Support multiple URL patterns: /manga/, /series/, /comic/, /webtoon/
+  const patterns = [
+    /\/manga\/([^\/\?#]+)/,
+    /\/series\/([^\/\?#]+)/,
+    /\/comic\/([^\/\?#]+)/,
+    /\/webtoon\/([^\/\?#]+)/,
+  ];
+  
+  for (const pattern of patterns) {
+    const match = url.match(pattern);
+    if (match) {
+      console.log(`[Slug] Extracted from URL: ${match[1]}`);
+      return match[1];
+    }
+  }
+  
+  // Fallback: use the last part of the path
+  const pathParts = url.split('/').filter(Boolean);
+  const lastPart = pathParts[pathParts.length - 1];
+  console.log(`[Slug] Fallback slug: ${lastPart}`);
+  return lastPart || 'unknown';
 }
 
 async function scrapeMangaInfo(url: string, source: string, supabase: any) {
@@ -460,12 +479,23 @@ async function scrapeMangaInfo(url: string, source: string, supabase: any) {
 
   const genres = smartExtractGenres(doc, config.selectors.genres);
   const slug = extractSlug(url);
+  
+  // Download and upload cover image to storage
+  let uploadedCoverUrl = cover;
+  if (cover) {
+    const coverFileName = `covers/${slug}-${Date.now()}.jpg`;
+    const uploadedCover = await downloadAndUploadImage(cover, supabase, 'manga-covers', coverFileName);
+    if (uploadedCover) {
+      uploadedCoverUrl = uploadedCover;
+      console.log(`[Manga Info] ✓ Cover uploaded to storage`);
+    }
+  }
 
   const mangaData = {
     title,
     slug,
     description,
-    cover_url: cover,
+    cover_url: uploadedCoverUrl,
     status: (statusRaw.toLowerCase().includes('ongoing') || statusRaw.includes('مستمر')) ? 'ongoing' : 'completed',
     genres: genres.length > 0 ? genres : null,
     author: author || null,
@@ -475,7 +505,7 @@ async function scrapeMangaInfo(url: string, source: string, supabase: any) {
     source,
   };
 
-  console.log(`[Manga Info] Success:`, { title, genres: genres.length, cover: !!cover });
+  console.log(`[Manga Info] Success:`, { title, genres: genres.length, cover: !!uploadedCoverUrl });
   return mangaData;
 }
 
@@ -553,7 +583,54 @@ async function scrapeChapters(mangaUrl: string, source: string, supabase: any) {
   return chapters;
 }
 
-async function scrapeChapterPages(chapterUrl: string, source: string, supabase: any) {
+// Helper function to download and upload image to Supabase Storage
+async function downloadAndUploadImage(imageUrl: string, supabase: any, bucket: string, path: string): Promise<string | null> {
+  try {
+    console.log(`[Storage] Downloading image: ${imageUrl}`);
+    
+    const response = await fetch(imageUrl, {
+      headers: getBrowserHeaders()
+    });
+    
+    if (!response.ok) {
+      console.error(`[Storage] Failed to download image: ${response.status}`);
+      return null;
+    }
+    
+    const blob = await response.blob();
+    const arrayBuffer = await blob.arrayBuffer();
+    const uint8Array = new Uint8Array(arrayBuffer);
+    
+    // Determine content type
+    const contentType = response.headers.get('content-type') || 'image/jpeg';
+    
+    // Upload to Supabase Storage
+    const { data, error } = await supabase.storage
+      .from(bucket)
+      .upload(path, uint8Array, {
+        contentType,
+        upsert: true
+      });
+    
+    if (error) {
+      console.error(`[Storage] Upload error:`, error);
+      return null;
+    }
+    
+    // Get public URL
+    const { data: { publicUrl } } = supabase.storage
+      .from(bucket)
+      .getPublicUrl(path);
+    
+    console.log(`[Storage] ✓ Uploaded successfully`);
+    return publicUrl;
+  } catch (error: any) {
+    console.error(`[Storage] Error:`, error?.message || error);
+    return null;
+  }
+}
+
+async function scrapeChapterPages(chapterUrl: string, source: string, supabase: any, chapterId: string) {
   console.log(`[Pages] Starting scrape: ${source} - ${chapterUrl}`);
   
   const config = await loadScraperConfig(supabase, source);
@@ -570,7 +647,8 @@ async function scrapeChapterPages(chapterUrl: string, source: string, supabase: 
     if (imageElements.length > 0) {
       console.log(`[Pages] Found ${imageElements.length} images with: ${imageSelector}`);
       
-      imageElements.forEach((img: any, index: number) => {
+      for (let index = 0; index < imageElements.length; index++) {
+        const img = imageElements[index] as any; // Type assertion for DOM element
         let imageUrl = img.getAttribute('src') || img.getAttribute('data-src') || img.getAttribute('data-lazy-src') || '';
         
         if (imageUrl) {
@@ -578,12 +656,16 @@ async function scrapeChapterPages(chapterUrl: string, source: string, supabase: 
             imageUrl = imageUrl.startsWith('//') ? 'https:' + imageUrl : config.baseUrl + imageUrl;
           }
           
+          // Download and upload to storage
+          const fileName = `${chapterId}/page-${index + 1}.jpg`;
+          const uploadedUrl = await downloadAndUploadImage(imageUrl, supabase, 'chapter-pages', fileName);
+          
           pages.push({
             page_number: index + 1,
-            image_url: imageUrl,
+            image_url: uploadedUrl || imageUrl, // Use uploaded URL if successful, fallback to original
           });
         }
-      });
+      }
       
       break;
     }
@@ -779,7 +861,7 @@ serve(async (req) => {
       }
 
       if (jobType === 'pages' && chapterId) {
-        const pages = await scrapeChapterPages(url, source, supabase);
+        const pages = await scrapeChapterPages(url, source, supabase, chapterId);
         
         for (const page of pages) {
           await supabase
