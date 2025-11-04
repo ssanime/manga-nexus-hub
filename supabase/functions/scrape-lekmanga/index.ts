@@ -173,8 +173,8 @@ async function loadScraperConfig(supabase: any, sourceName: string) {
         chapterDate: [".chapter-release-date", ".chapterdate"],
         pageImages: ["#readerarea img", ".reading-content img", "img.wp-manga-chapter-img"],
         year: [".year", ".release-year"],
-        catalogMangaCard: [".bs", ".listupd .bsx", ".page-item-detail"],
-        catalogMangaLink: ["a", ".bsx a"],
+        catalogMangaCard: [".bs", ".bsx", ".listupd article", ".page-item-detail"],
+        catalogMangaLink: ["a"],
         catalogMangaCover: ["img"]
       }
     }
@@ -599,42 +599,86 @@ async function scrapeCatalog(source: string, limit = 20, supabase: any) {
   const config = await loadScraperConfig(supabase, source);
   if (!config) throw new Error(`Unknown source: ${source}. Please add it in Sources Manager first.`);
 
-  const html = await fetchHTML(config.baseUrl, config);
-  const doc = new DOMParser().parseFromString(html, 'text/html');
-  if (!doc) throw new Error('Failed to parse HTML');
+  // Try different catalog URLs based on source
+  const catalogUrls = [
+    config.baseUrl,
+    config.baseUrl + '/manga',
+    config.baseUrl + '/series',
+    config.baseUrl + '/mangalist',
+    config.baseUrl + '/manga-list'
+  ];
 
-  const mangaUrls: string[] = [];
+  let mangaUrls: string[] = [];
   
-  if (config.selectors.catalogMangaCard) {
-    for (const cardSelector of config.selectors.catalogMangaCard) {
-      const cards = doc.querySelectorAll(cardSelector);
-      if (cards.length > 0) {
-        console.log(`[Catalog] Found ${cards.length} manga cards with: ${cardSelector}`);
-        
-        cards.forEach((card: any) => {
-          if (mangaUrls.length >= limit) return;
-          
-          for (const linkSelector of config.selectors.catalogMangaLink || ['a']) {
-            const link = card.querySelector(linkSelector);
-            if (link) {
-              let href = link.getAttribute('href') || '';
-              if (href && !href.includes('javascript:')) {
-                href = href.startsWith('http') ? href : config.baseUrl + href;
-                if (href.includes('/manga/')) {
-                  mangaUrls.push(href);
-                  break;
+  // Try each catalog URL until we find manga
+  for (const catalogUrl of catalogUrls) {
+    console.log(`[Catalog] Trying URL: ${catalogUrl}`);
+    
+    try {
+      const html = await fetchHTML(catalogUrl, config);
+      const doc = new DOMParser().parseFromString(html, 'text/html');
+      if (!doc) continue;
+
+      if (config.selectors.catalogMangaCard) {
+        for (const cardSelector of config.selectors.catalogMangaCard) {
+          const cards = doc.querySelectorAll(cardSelector);
+          if (cards.length > 0) {
+            console.log(`[Catalog] Found ${cards.length} manga cards with: ${cardSelector}`);
+            
+            cards.forEach((card: any) => {
+              if (mangaUrls.length >= limit) return;
+              
+              // Try to find link in card
+              for (const linkSelector of config.selectors.catalogMangaLink || ['a']) {
+                const link = card.querySelector(linkSelector);
+                if (link) {
+                  let href = link.getAttribute('href') || '';
+                  if (href && !href.includes('javascript:')) {
+                    // Normalize URL
+                    if (!href.startsWith('http')) {
+                      href = href.startsWith('//') ? 'https:' + href : 
+                             href.startsWith('/') ? config.baseUrl + href : 
+                             config.baseUrl + '/' + href;
+                    }
+                    
+                    // Check if it's a valid manga URL
+                    const validPatterns = ['/manga/', '/series/', '/comic/', '/webtoon/'];
+                    const isValidUrl = validPatterns.some(pattern => href.includes(pattern));
+                    
+                    if (isValidUrl && !mangaUrls.includes(href)) {
+                      mangaUrls.push(href);
+                      console.log(`[Catalog] Added: ${href}`);
+                      break;
+                    }
+                  }
                 }
               }
+            });
+            
+            // If we found manga, stop trying other selectors and URLs
+            if (mangaUrls.length > 0) {
+              break;
             }
           }
-        });
-        
+        }
+      }
+      
+      // If we found manga, stop trying other URLs
+      if (mangaUrls.length > 0) {
         break;
       }
+    } catch (error: any) {
+      console.log(`[Catalog] Failed to fetch ${catalogUrl}:`, error.message);
+      continue;
     }
   }
 
   console.log(`[Catalog] Success: ${mangaUrls.length} manga URLs`);
+  
+  if (mangaUrls.length === 0) {
+    console.warn(`[Catalog] ⚠️ No manga found. Check selectors in database for source: ${source}`);
+  }
+  
   return mangaUrls;
 }
 
