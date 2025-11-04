@@ -246,35 +246,55 @@ async function fetchHTML(url: string, config: any, retryCount = 0): Promise<stri
 
     const html = await response.text();
     
-    // Advanced Cloudflare detection - more specific patterns
-    // Only detect actual Cloudflare challenges, not just mentions of Cloudflare
-    const cfChallengePatterns = [
-      'cf-browser-verification',
-      'challenge-platform', 
-      'cf_challenge',
-      'just a moment',
-      'checking your browser',
-      '__cf_chl_jschl_tk__',
-      'cf-challenge-running'
-    ];
+    // Enhanced Cloudflare detection - require multiple strong indicators
+    // Check for Cloudflare-specific response headers first
+    const cfHeaders = response.headers.get('cf-ray') || 
+                     response.headers.get('cf-cache-status') ||
+                     response.headers.get('server')?.toLowerCase().includes('cloudflare');
     
     const lowerHtml = html.toLowerCase();
     
-    // Check for actual Cloudflare challenge indicators
-    // Must have both a challenge pattern AND actual challenge elements
-    const hasChallengePattern = cfChallengePatterns.some(p => lowerHtml.includes(p));
-    const hasChallengeElements = (
-      lowerHtml.includes('<title>just a moment') || 
-      lowerHtml.includes('enable javascript and cookies') ||
-      (lowerHtml.includes('cloudflare') && (
-        lowerHtml.includes('ray id') || 
-        lowerHtml.includes('performance & security by')
-      ))
+    // Strong indicators that appear ONLY in actual Cloudflare challenges
+    const strongChallengeIndicators = [
+      'cf-browser-verification',
+      '__cf_chl_jschl_tk__',
+      'cf-challenge-running',
+      'cf_chl_opt'
+    ];
+    
+    // Title check - most reliable indicator
+    const isChallengeTitle = lowerHtml.includes('<title>just a moment') || 
+                            lowerHtml.includes('<title>attention required');
+    
+    // Body checks - require specific challenge page content
+    const hasChallengeContent = (
+      lowerHtml.includes('enable javascript and cookies to continue') ||
+      lowerHtml.includes('checking if the site connection is secure') ||
+      lowerHtml.includes('checking your browser before accessing')
     );
     
-    if (hasChallengePattern || hasChallengeElements) {
-      const detectedPatterns = cfChallengePatterns.filter(p => lowerHtml.includes(p));
-      console.error(`[Fetch] Cloudflare challenge detected: ${detectedPatterns.join(', ')}`);
+    // Count strong indicators present
+    const strongIndicatorsCount = strongChallengeIndicators.filter(p => lowerHtml.includes(p)).length;
+    
+    // Cloudflare Ray ID in specific format (only in challenge pages)
+    const hasRayIdInError = /ray id: [a-f0-9]{16}/.test(lowerHtml);
+    
+    // Must have MULTIPLE indicators to confirm it's actually a Cloudflare challenge
+    const isActualChallenge = (
+      isChallengeTitle ||
+      (strongIndicatorsCount >= 2) ||
+      (hasChallengeContent && cfHeaders) ||
+      (hasRayIdInError && hasChallengeContent)
+    );
+    
+    if (isActualChallenge) {
+      const detectedIndicators: string[] = [];
+      if (isChallengeTitle) detectedIndicators.push('challenge-title');
+      if (hasChallengeContent) detectedIndicators.push('challenge-content');
+      if (cfHeaders) detectedIndicators.push('cf-headers');
+      if (strongIndicatorsCount > 0) detectedIndicators.push(`${strongIndicatorsCount}-strong-indicators`);
+      
+      console.error(`[Fetch] Cloudflare challenge confirmed: ${detectedIndicators.join(', ')}`);
       throw new Error('CLOUDFLARE_CHALLENGE');
     }
     
