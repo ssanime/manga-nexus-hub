@@ -28,9 +28,13 @@ export const Navbar = () => {
     <nav className="sticky top-0 z-50 border-b border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
       <div className="container mx-auto px-4">
         <div className="flex h-16 items-center justify-between">
-          <Link to="/" className="flex items-center gap-2 group">
+          <Link to="/" className="flex items-center gap-3 group">
             <div className="relative">
-              <BookOpen className="h-8 w-8 text-primary transition-transform group-hover:scale-110" />
+              <img 
+                src="/logo.png" 
+                alt="Mangafas Logo" 
+                className="h-12 w-12 object-contain transition-transform group-hover:scale-110 drop-shadow-lg"
+              />
               <div className="absolute inset-0 blur-xl bg-primary/20 group-hover:bg-primary/40 transition-all" />
             </div>
             <span className="text-2xl font-bold bg-manga-gradient bg-clip-text text-transparent">

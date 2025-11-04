@@ -21,7 +21,11 @@ export default function CreateTeam() {
     name: "",
     description: "",
     join_requirements: "",
+    require_sample_chapter: false,
+    sample_chapter_instructions: "",
   });
+  
+  const [customQuestions, setCustomQuestions] = useState<string[]>([""]);
 
   const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -69,6 +73,9 @@ export default function CreateTeam() {
       // Create team
       const slug = formData.name.toLowerCase().replace(/\s+/g, '-').replace(/[^\w\-]/g, '');
       
+      // Prepare custom questions array (filter out empty strings)
+      const filteredQuestions = customQuestions.filter(q => q.trim() !== "");
+      
       const { error: insertError } = await supabase
         .from('teams')
         .insert({
@@ -78,7 +85,10 @@ export default function CreateTeam() {
           logo_url: logoUrl || null,
           join_requirements: formData.join_requirements || null,
           created_by: user.id,
-          status: 'pending'
+          status: 'pending',
+          require_sample_chapter: formData.require_sample_chapter,
+          sample_chapter_instructions: formData.sample_chapter_instructions || null,
+          custom_questions: filteredQuestions.length > 0 ? filteredQuestions : null,
         });
 
       if (insertError) throw insertError;
@@ -171,6 +181,77 @@ export default function CreateTeam() {
                   placeholder="يجب أن يكون لديك خبرة في الترجمة..."
                   rows={3}
                 />
+              </div>
+
+              {/* Sample Chapter Requirement */}
+              <div className="space-y-3 border border-border rounded-lg p-4 bg-secondary/10">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="require_sample"
+                    checked={formData.require_sample_chapter}
+                    onChange={(e) => setFormData({ ...formData, require_sample_chapter: e.target.checked })}
+                    className="w-4 h-4 accent-primary"
+                  />
+                  <Label htmlFor="require_sample" className="cursor-pointer">
+                    طلب فصل عمل كعينة من المتقدمين
+                  </Label>
+                </div>
+                
+                {formData.require_sample_chapter && (
+                  <div className="space-y-2">
+                    <Label className="text-sm">تعليمات الفصل النموذجي</Label>
+                    <Textarea
+                      value={formData.sample_chapter_instructions}
+                      onChange={(e) => setFormData({ ...formData, sample_chapter_instructions: e.target.value })}
+                      placeholder="مثال: يرجى ترجمة 5 صفحات من أي مانجا حديثة..."
+                      rows={2}
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Custom Questions */}
+              <div className="space-y-3 border border-border rounded-lg p-4 bg-secondary/10">
+                <div className="flex items-center justify-between">
+                  <Label>أسئلة مخصصة للمتقدمين</Label>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setCustomQuestions([...customQuestions, ""])}
+                  >
+                    إضافة سؤال
+                  </Button>
+                </div>
+                
+                <div className="space-y-2">
+                  {customQuestions.map((question, index) => (
+                    <div key={index} className="flex gap-2">
+                      <Input
+                        value={question}
+                        onChange={(e) => {
+                          const newQuestions = [...customQuestions];
+                          newQuestions[index] = e.target.value;
+                          setCustomQuestions(newQuestions);
+                        }}
+                        placeholder={`السؤال ${index + 1}`}
+                      />
+                      {customQuestions.length > 1 && (
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="destructive"
+                          onClick={() => {
+                            setCustomQuestions(customQuestions.filter((_, i) => i !== index));
+                          }}
+                        >
+                          ×
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                </div>
               </div>
 
               <Button type="submit" disabled={loading} className="w-full">

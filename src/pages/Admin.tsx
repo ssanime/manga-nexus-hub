@@ -15,6 +15,7 @@ import { ScrapeFromURL } from "@/components/admin/ScrapeFromURL";
 import { CloudflareNotice } from "@/components/admin/CloudflareNotice";
 import { TeamsManager } from "@/components/admin/TeamsManager";
 import { MangaManager } from "@/components/admin/MangaManager";
+import { DatabaseBackup } from "@/components/admin/DatabaseBackup";
 import { useNavigate } from "react-router-dom";
 
 const Admin = () => {
@@ -270,7 +271,7 @@ const Admin = () => {
 
           {/* Tabs */}
           <Tabs defaultValue="manga" className="w-full">
-            <TabsList className="grid w-full max-w-6xl grid-cols-8">
+            <TabsList className="grid w-full max-w-6xl grid-cols-10">
               <TabsTrigger value="manage">إدارة المانجا</TabsTrigger>
               <TabsTrigger value="manga">مانجا</TabsTrigger>
               <TabsTrigger value="manhwa">مانهوا</TabsTrigger>
@@ -278,7 +279,9 @@ const Admin = () => {
               <TabsTrigger value="teams"><Users className="w-4 h-4 mr-2" />الفرق</TabsTrigger>
               <TabsTrigger value="add-manga"><Plus className="w-4 h-4 mr-2" />إضافة</TabsTrigger>
               <TabsTrigger value="add-chapter"><BookPlus className="w-4 h-4 mr-2" />فصل</TabsTrigger>
+              <TabsTrigger value="sources"><Globe className="w-4 h-4 mr-2" />المصادر</TabsTrigger>
               <TabsTrigger value="jobs"><Database className="w-4 h-4 mr-2" />المهام</TabsTrigger>
+              <TabsTrigger value="backup"><Download className="w-4 h-4 mr-2" />نسخ احتياطي</TabsTrigger>
             </TabsList>
 
             <TabsContent value="manage" className="mt-6">
@@ -519,6 +522,16 @@ const Admin = () => {
                   </Card>
                 ))
               )}
+            </TabsContent>
+
+            {/* Sources Tab */}
+            <TabsContent value="sources" className="mt-6">
+              <SourcesManager />
+            </TabsContent>
+
+            {/* Backup Tab */}
+            <TabsContent value="backup" className="mt-6">
+              <DatabaseBackup />
             </TabsContent>
 
           </Tabs>
