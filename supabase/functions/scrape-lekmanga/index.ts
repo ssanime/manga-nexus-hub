@@ -160,22 +160,23 @@ async function loadScraperConfig(supabase: any, sourceName: string) {
     "azoramoon": {
       baseUrl: "https://azoramoon.com",
       selectors: {
-        title: [".post-title h1", "h1.entry-title", ".series-title", "h1"],
-        cover: [".series-thumb img", ".summary_image img", "img.wp-post-image", ".cover img"],
-        description: [".series-synops", ".summary__content", ".description", ".manga-description"],
-        status: [".status .summary-content", ".series-status", ".manga-status"],
-        genres: [".series-genres a", ".genres-content a", "a[rel='tag']"],
-        author: [".author-content", ".series-author"],
+        title: [".post-title h1", "h1.entry-title", ".series-title", ".entry-title", "h1"],
+        cover: [".series-thumb img", ".summary_image img", "img.wp-post-image", ".thumb img", ".cover img"],
+        description: [".series-synops", ".summary__content", ".entry-content[itemprop='description']", ".description", ".manga-description"],
+        status: [".status .summary-content", ".series-status", ".spe span:last-child", ".manga-status"],
+        genres: [".series-genres a", ".genres-content a", ".mgen a", "a[rel='tag']"],
+        author: [".author-content", ".series-author", ".fmed b"],
         artist: [".artist-content", ".series-artist"],
-        chapters: ["li.wp-manga-chapter", ".chapter-item", ".eplister ul li"],
-        chapterTitle: ["a", ".chapternum"],
+        rating: [".rating .num", ".series-rating", "[itemprop='ratingValue']"],
+        chapters: [".eplister ul li", "li.wp-manga-chapter", ".chapter-item"],
+        chapterTitle: ["a .chapternum", "a", ".chapternum"],
         chapterUrl: ["a"],
-        chapterDate: [".chapter-release-date", ".chapterdate"],
-        pageImages: ["#readerarea img", ".reading-content img", "img.wp-manga-chapter-img"],
-        year: [".year", ".release-year"],
-        catalogMangaCard: [".bs", ".bsx", ".listupd article", ".page-item-detail"],
-        catalogMangaLink: ["a"],
-        catalogMangaCover: ["img"]
+        chapterDate: [".chapterdate", ".chapter-release-date"],
+        pageImages: ["#readerarea img", ".rdminimal img", ".reading-content img", "img.wp-manga-chapter-img"],
+        year: [".fmed:contains('Released') b", ".year", ".release-year"],
+        catalogMangaCard: [".bs", ".bsx", ".listupd .bs", ".listupd article", ".page-item-detail"],
+        catalogMangaLink: [".bsx a", "a"],
+        catalogMangaCover: [".limit img", "img"]
       }
     }
   };
@@ -463,10 +464,22 @@ async function scrapeMangaInfo(url: string, source: string, supabase: any) {
     cover = cover.startsWith('//') ? 'https:' + cover : config.baseUrl + cover;
   }
   
-  const description = smartSelect(doc, config.selectors.description, 'text') || '';
+  const description = smartSelect(doc, config.selectors.description, 'text') || 'لا يوجد وصف متاح';
   const statusRaw = smartSelect(doc, config.selectors.status, 'text') || 'ongoing';
-  const author = smartSelect(doc, config.selectors.author, 'text') || '';
+  const author = smartSelect(doc, config.selectors.author, 'text') || 'غير معروف';
   const artist = smartSelect(doc, config.selectors.artist, 'text') || '';
+  
+  // Try to extract rating
+  let rating = 0;
+  if (config.selectors.rating) {
+    const ratingText = smartSelect(doc, config.selectors.rating, 'text');
+    if (ratingText) {
+      const ratingMatch = ratingText.match(/[\d.]+/);
+      if (ratingMatch) {
+        rating = parseFloat(ratingMatch[0]);
+      }
+    }
+  }
   
   let year = null;
   if (config.selectors.year) {
@@ -500,6 +513,7 @@ async function scrapeMangaInfo(url: string, source: string, supabase: any) {
     genres: genres.length > 0 ? genres : null,
     author: author || null,
     artist: artist || null,
+    rating: rating > 0 ? rating : null,
     year,
     source_url: url,
     source,
@@ -676,7 +690,7 @@ async function scrapeChapterPages(chapterUrl: string, source: string, supabase: 
 }
 
 async function scrapeCatalog(source: string, limit = 20, supabase: any) {
-  console.log(`[Catalog] 📑 Starting scrape from ${source.toUpperCase()} - limit ${limit}`);
+  console.log(`[Catalog] 📑 Starting full catalog scrape from ${source.toUpperCase()} - limit ${limit}`);
   
   const config = await loadScraperConfig(supabase, source);
   if (!config) throw new Error(`Unknown source: ${source}. Please add it in Sources Manager first.`);
@@ -690,7 +704,7 @@ async function scrapeCatalog(source: string, limit = 20, supabase: any) {
     config.baseUrl + '/manga-list'
   ];
 
-  let mangaUrls: string[] = [];
+  const mangaList: any[] = [];
   
   // Try each catalog URL until we find manga
   for (const catalogUrl of catalogUrls) {
@@ -707,10 +721,11 @@ async function scrapeCatalog(source: string, limit = 20, supabase: any) {
           if (cards.length > 0) {
             console.log(`[Catalog] Found ${cards.length} manga cards with: ${cardSelector}`);
             
-            cards.forEach((card: any) => {
-              if (mangaUrls.length >= limit) return;
+            for (let i = 0; i < cards.length && mangaList.length < limit; i++) {
+              const card = cards[i] as any;
               
               // Try to find link in card
+              let mangaUrl = '';
               for (const linkSelector of config.selectors.catalogMangaLink || ['a']) {
                 const link = card.querySelector(linkSelector);
                 if (link) {
@@ -727,18 +742,99 @@ async function scrapeCatalog(source: string, limit = 20, supabase: any) {
                     const validPatterns = ['/manga/', '/series/', '/comic/', '/webtoon/'];
                     const isValidUrl = validPatterns.some(pattern => href.includes(pattern));
                     
-                    if (isValidUrl && !mangaUrls.includes(href)) {
-                      mangaUrls.push(href);
-                      console.log(`[Catalog] Added: ${href}`);
+                    if (isValidUrl) {
+                      mangaUrl = href;
                       break;
                     }
                   }
                 }
               }
-            });
+              
+              if (!mangaUrl) continue;
+              
+              // Check if already processed
+              const alreadyExists = mangaList.some(m => m.url === mangaUrl);
+              if (alreadyExists) continue;
+              
+              console.log(`[Catalog] Processing manga ${mangaList.length + 1}/${limit}: ${mangaUrl}`);
+              
+              // Scrape full manga info and chapters
+              try {
+                await humanDelay(); // Be respectful to the server
+                
+                const mangaInfo = await scrapeMangaInfo(mangaUrl, source, supabase);
+                
+                // Save manga to database
+                const { data: manga, error: mangaError } = await supabase
+                  .from('manga')
+                  .upsert(mangaInfo, { onConflict: 'source_url' })
+                  .select()
+                  .single();
+
+                if (mangaError) {
+                  console.error(`[Catalog] Error saving manga:`, mangaError);
+                  continue;
+                }
+                
+                console.log(`[Catalog] ✓ Saved manga: ${manga.title}`);
+                
+                // Scrape all chapters for this manga
+                await humanDelay();
+                const chaptersData = await scrapeChapters(mangaUrl, source, supabase);
+                
+                if (chaptersData.length > 0) {
+                  console.log(`[Catalog] Found ${chaptersData.length} chapters, saving...`);
+                  
+                  // Save all chapters
+                  for (const chapter of chaptersData) {
+                    const { data: savedChapter, error: chapterError } = await supabase
+                      .from('chapters')
+                      .upsert({ ...chapter, manga_id: manga.id }, { onConflict: 'manga_id,chapter_number' })
+                      .select()
+                      .single();
+                    
+                    if (chapterError) {
+                      console.error(`[Catalog] Error saving chapter ${chapter.chapter_number}:`, chapterError);
+                      continue;
+                    }
+                    
+                    // Scrape chapter pages
+                    if (savedChapter) {
+                      try {
+                        await humanDelay();
+                        const pages = await scrapeChapterPages(chapter.source_url, source, supabase, savedChapter.id);
+                        
+                        // Save pages
+                        for (const page of pages) {
+                          await supabase
+                            .from('chapter_pages')
+                            .upsert({ ...page, chapter_id: savedChapter.id }, { onConflict: 'chapter_id,page_number' });
+                        }
+                        
+                        console.log(`[Catalog] ✓ Saved ${pages.length} pages for chapter ${chapter.chapter_number}`);
+                      } catch (pageError: any) {
+                        console.error(`[Catalog] Error scraping pages for chapter ${chapter.chapter_number}:`, pageError.message);
+                      }
+                    }
+                  }
+                  
+                  console.log(`[Catalog] ✓ Saved all ${chaptersData.length} chapters with pages`);
+                }
+                
+                mangaList.push({
+                  url: mangaUrl,
+                  title: manga.title,
+                  chaptersCount: chaptersData.length
+                });
+                
+              } catch (error: any) {
+                console.error(`[Catalog] Error processing manga ${mangaUrl}:`, error.message);
+                continue;
+              }
+            }
             
             // If we found manga, stop trying other selectors and URLs
-            if (mangaUrls.length > 0) {
+            if (mangaList.length > 0) {
               break;
             }
           }
@@ -746,7 +842,7 @@ async function scrapeCatalog(source: string, limit = 20, supabase: any) {
       }
       
       // If we found manga, stop trying other URLs
-      if (mangaUrls.length > 0) {
+      if (mangaList.length > 0) {
         break;
       }
     } catch (error: any) {
@@ -755,13 +851,13 @@ async function scrapeCatalog(source: string, limit = 20, supabase: any) {
     }
   }
 
-  console.log(`[Catalog] Success: ${mangaUrls.length} manga URLs`);
+  console.log(`[Catalog] Complete: ${mangaList.length} manga with full info and chapters`);
   
-  if (mangaUrls.length === 0) {
+  if (mangaList.length === 0) {
     console.warn(`[Catalog] ⚠️ No manga found. Check selectors in database for source: ${source}`);
   }
   
-  return mangaUrls;
+  return mangaList;
 }
 
 serve(async (req) => {
@@ -806,7 +902,7 @@ serve(async (req) => {
 
     try {
       if (jobType === 'catalog') {
-        const mangaUrls = await scrapeCatalog(source, limit, supabase);
+        const mangaList = await scrapeCatalog(source, limit, supabase);
         
         await supabase
           .from('scrape_jobs')
@@ -814,7 +910,7 @@ serve(async (req) => {
           .eq('id', job.id);
 
         return new Response(
-          JSON.stringify({ success: true, mangaUrls, count: mangaUrls.length }),
+          JSON.stringify({ success: true, mangaList, count: mangaList.length }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
@@ -834,10 +930,37 @@ serve(async (req) => {
         if (jobType === 'chapters') {
           chaptersData = await scrapeChapters(url, source, supabase);
           
+          // Save all chapters and their pages
           for (const chapter of chaptersData) {
-            await supabase
+            const { data: savedChapter, error: chapterError } = await supabase
               .from('chapters')
-              .upsert({ ...chapter, manga_id: manga.id }, { onConflict: 'manga_id,chapter_number' });
+              .upsert({ ...chapter, manga_id: manga.id }, { onConflict: 'manga_id,chapter_number' })
+              .select()
+              .single();
+            
+            if (chapterError) {
+              console.error(`[Chapters] Error saving chapter ${chapter.chapter_number}:`, chapterError);
+              continue;
+            }
+            
+            // Scrape and save pages for this chapter
+            if (savedChapter) {
+              try {
+                await humanDelay(); // Be respectful to the server
+                const pages = await scrapeChapterPages(chapter.source_url, source, supabase, savedChapter.id);
+                
+                // Save all pages
+                for (const page of pages) {
+                  await supabase
+                    .from('chapter_pages')
+                    .upsert({ ...page, chapter_id: savedChapter.id }, { onConflict: 'chapter_id,page_number' });
+                }
+                
+                console.log(`[Chapters] ✓ Saved ${pages.length} pages for chapter ${chapter.chapter_number}`);
+              } catch (pageError: any) {
+                console.error(`[Chapters] Error scraping pages for chapter ${chapter.chapter_number}:`, pageError.message);
+              }
+            }
           }
         }
 
