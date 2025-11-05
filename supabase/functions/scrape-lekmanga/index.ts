@@ -424,6 +424,41 @@ function smartExtractGenres(doc: any, selectors: string[]): string[] {
   return [...new Set(genres)]; // Remove duplicates
 }
 
+// Convert Arabic date to ISO format
+function parseArabicDate(dateText: string): string | null {
+  if (!dateText) return null;
+  
+  // Map Arabic months to numbers
+  const arabicMonths: { [key: string]: number } = {
+    'يناير': 1, 'فبراير': 2, 'مارس': 3, 'أبريل': 4,
+    'مايو': 5, 'يونيو': 6, 'يوليو': 7, 'أغسطس': 8,
+    'سبتمبر': 9, 'أكتوبر': 10, 'نوفمبر': 11, 'ديسمبر': 12
+  };
+  
+  // Try to parse Arabic date format: "أكتوبر 4, 2025" or "4 أكتوبر 2025"
+  for (const [month, num] of Object.entries(arabicMonths)) {
+    if (dateText.includes(month)) {
+      const numbers = dateText.match(/\d+/g);
+      if (numbers && numbers.length >= 2) {
+        const day = numbers[0];
+        const year = numbers[1];
+        // Return ISO format: YYYY-MM-DD
+        return `${year}-${String(num).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      }
+    }
+  }
+  
+  // Try standard date formats
+  const dateMatch = dateText.match(/(\d{4})-(\d{2})-(\d{2})/);
+  if (dateMatch) {
+    return dateMatch[0];
+  }
+  
+  // Fallback: return current date
+  console.log(`[Date] Could not parse date: ${dateText}, using current date`);
+  return new Date().toISOString().split('T')[0];
+}
+
 function extractSlug(url: string): string {
   // Support multiple URL patterns: /manga/, /series/, /comic/, /webtoon/
   const patterns = [
@@ -448,6 +483,11 @@ function extractSlug(url: string): string {
   return lastPart || 'unknown';
 }
 
+// Clean URL by removing whitespace, tabs, and newlines
+function cleanUrl(url: string): string {
+  return url.replace(/[\s\t\n\r]+/g, '').trim();
+}
+
 async function scrapeMangaInfo(url: string, source: string, supabase: any) {
   console.log(`[Manga Info] 📖 Starting scrape from ${source.toUpperCase()}: ${url}`);
   
@@ -463,8 +503,29 @@ async function scrapeMangaInfo(url: string, source: string, supabase: any) {
   if (cover && !cover.startsWith('http')) {
     cover = cover.startsWith('//') ? 'https:' + cover : config.baseUrl + cover;
   }
+  cover = cleanUrl(cover);
   
-  const description = smartSelect(doc, config.selectors.description, 'text') || 'لا يوجد وصف متاح';
+  // Try multiple selectors for description
+  let description = '';
+  for (const selector of config.selectors.description) {
+    description = smartSelect(doc, selector, 'text') || '';
+    if (description && description.length > 20) break;
+  }
+  
+  // Additional fallback for description
+  if (!description || description.length < 20) {
+    const descEl = doc.querySelector('.summary__content, .description, .manga-excerpt, [itemprop="description"]');
+    if (descEl) {
+      description = descEl.textContent?.trim() || '';
+    }
+  }
+  
+  if (!description || description.length < 10) {
+    description = 'لا يوجد وصف متاح';
+  }
+  
+  console.log(`[Manga Info] Description extracted: ${description.substring(0, 100)}...`);
+  
   const statusRaw = smartSelect(doc, config.selectors.status, 'text') || 'ongoing';
   const author = smartSelect(doc, config.selectors.author, 'text') || 'غير معروف';
   const artist = smartSelect(doc, config.selectors.artist, 'text') || '';
@@ -477,6 +538,7 @@ async function scrapeMangaInfo(url: string, source: string, supabase: any) {
       const ratingMatch = ratingText.match(/[\d.]+/);
       if (ratingMatch) {
         rating = parseFloat(ratingMatch[0]);
+        console.log(`[Manga Info] Rating extracted: ${rating}`);
       }
     }
   }
@@ -578,11 +640,14 @@ async function scrapeChapters(mangaUrl: string, source: string, supabase: any) {
             }
           }
 
+          // Convert date to ISO format
+          const releaseDate = parseArabicDate(dateText);
+          
           chapters.push({
             chapter_number: chapterNumber,
             title: title || `Chapter ${chapterNumber}`,
             source_url: chapterUrl.startsWith('http') ? chapterUrl : config.baseUrl + chapterUrl,
-            release_date: dateText || null,
+            release_date: releaseDate,
           });
         } catch (e: any) {
           console.error(`[Chapters] Error processing chapter:`, e?.message || e);
@@ -666,6 +731,9 @@ async function scrapeChapterPages(chapterUrl: string, source: string, supabase: 
         let imageUrl = img.getAttribute('src') || img.getAttribute('data-src') || img.getAttribute('data-lazy-src') || '';
         
         if (imageUrl) {
+          // Clean URL from whitespace, tabs, newlines
+          imageUrl = cleanUrl(imageUrl);
+          
           // Fix URL construction - don't add baseUrl if already absolute
           if (!imageUrl.startsWith('http')) {
             if (imageUrl.startsWith('//')) {
@@ -678,14 +746,21 @@ async function scrapeChapterPages(chapterUrl: string, source: string, supabase: 
             }
           }
           
+          console.log(`[Pages] Processing page ${index + 1}: ${imageUrl.substring(0, 80)}...`);
+          
           // Download and upload to storage
           const fileName = `${chapterId}/page-${index + 1}.jpg`;
           const uploadedUrl = await downloadAndUploadImage(imageUrl, supabase, 'chapter-pages', fileName);
           
-          pages.push({
-            page_number: index + 1,
-            image_url: uploadedUrl || imageUrl,
-          });
+          if (uploadedUrl) {
+            pages.push({
+              page_number: index + 1,
+              image_url: uploadedUrl,
+            });
+            console.log(`[Pages] ✓ Uploaded page ${index + 1}`);
+          } else {
+            console.error(`[Pages] ✗ Failed to upload page ${index + 1}`);
+          }
         }
       }
       
