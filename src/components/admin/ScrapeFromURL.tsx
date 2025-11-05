@@ -4,10 +4,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Link2, Download } from "lucide-react";
+import { Link2, Download, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
+import { Progress } from "@/components/ui/progress";
 
 export const ScrapeFromURL = ({ onSuccess }: { onSuccess: () => void }) => {
   const { toast } = useToast();
@@ -17,6 +18,8 @@ export const ScrapeFromURL = ({ onSuccess }: { onSuccess: () => void }) => {
   const [selectedSource, setSelectedSource] = useState<string>("");
   const [catalogSource, setCatalogSource] = useState<string>("");
   const [catalogLimit, setCatalogLimit] = useState("20");
+  const [progress, setProgress] = useState(0);
+  const [progressMessage, setProgressMessage] = useState("");
 
   const { data: sources } = useQuery({
     queryKey: ['scraper-sources'],
@@ -42,14 +45,20 @@ export const ScrapeFromURL = ({ onSuccess }: { onSuccess: () => void }) => {
     }
 
     setLoading(true);
+    setProgress(0);
+    setProgressMessage("جاري الاتصال بالموقع...");
+    
     try {
       console.log(`Starting scrape: ${selectedSource} - ${url}`);
+      
+      setProgress(10);
+      setProgressMessage("جاري سحب معلومات المانجا...");
       
       // Scrape manga info and chapters together
       const { data: response, error } = await supabase.functions.invoke('scrape-lekmanga', {
         body: {
           url,
-          jobType: 'chapters', // This will scrape both info and chapters
+          jobType: 'chapters',
           source: selectedSource,
         },
       });
@@ -59,6 +68,9 @@ export const ScrapeFromURL = ({ onSuccess }: { onSuccess: () => void }) => {
         throw error;
       }
 
+      setProgress(50);
+      setProgressMessage("جاري معالجة الفصول...");
+
       console.log('Scrape response:', response);
 
       const manga = response?.manga;
@@ -67,6 +79,9 @@ export const ScrapeFromURL = ({ onSuccess }: { onSuccess: () => void }) => {
       if (!manga || !manga.title) {
         throw new Error('لم يتم العثور على بيانات المانجا. قد يكون الموقع محمي أو الرابط غير صحيح');
       }
+
+      setProgress(100);
+      setProgressMessage("اكتمل السحب بنجاح!");
 
       toast({
         title: "✅ نجح السحب",
@@ -95,6 +110,8 @@ export const ScrapeFromURL = ({ onSuccess }: { onSuccess: () => void }) => {
       });
     } finally {
       setLoading(false);
+      setProgress(0);
+      setProgressMessage("");
     }
   };
 
@@ -109,10 +126,16 @@ export const ScrapeFromURL = ({ onSuccess }: { onSuccess: () => void }) => {
     }
 
     setCatalogLoading(true);
+    setProgress(0);
+    setProgressMessage("جاري الاتصال بالكتالوج...");
+    
     try {
       const source = sources?.find(s => s.name === catalogSource);
       
       console.log(`Starting catalog scrape: ${catalogSource}`);
+      
+      setProgress(20);
+      setProgressMessage("جاري البحث عن المانجا في الكتالوج...");
       
       const { data: response, error } = await supabase.functions.invoke('scrape-lekmanga', {
         body: {
@@ -128,6 +151,9 @@ export const ScrapeFromURL = ({ onSuccess }: { onSuccess: () => void }) => {
         throw error;
       }
 
+      setProgress(60);
+      setProgressMessage("جاري سحب بيانات المانجا...");
+
       console.log('Catalog response:', response);
 
       const mangaUrls = response?.mangaUrls || [];
@@ -137,9 +163,12 @@ export const ScrapeFromURL = ({ onSuccess }: { onSuccess: () => void }) => {
         throw new Error('لم يتم العثور على أي مانجا في الكتالوج');
       }
 
+      setProgress(100);
+      setProgressMessage("اكتمل سحب الكتالوج!");
+
       toast({
         title: "✅ تم سحب الكتالوج",
-        description: `تم العثور على ${count} مانجا. يمكنك الآن سحب كل واحدة على حدة`,
+        description: `تم سحب ${count} مانجا بنجاح مع جميع الفصول والصور`,
       });
 
       // Show URLs in console for debugging
@@ -162,6 +191,8 @@ export const ScrapeFromURL = ({ onSuccess }: { onSuccess: () => void }) => {
       });
     } finally {
       setCatalogLoading(false);
+      setProgress(0);
+      setProgressMessage("");
     }
   };
 
@@ -202,6 +233,16 @@ export const ScrapeFromURL = ({ onSuccess }: { onSuccess: () => void }) => {
                 dir="ltr"
               />
             </div>
+
+            {loading && (
+              <div className="space-y-2">
+                <Progress value={progress} className="w-full" />
+                <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span>{progressMessage}</span>
+                </div>
+              </div>
+            )}
 
             <Button 
               onClick={handleScrape} 
@@ -267,6 +308,16 @@ export const ScrapeFromURL = ({ onSuccess }: { onSuccess: () => void }) => {
                 تحديد: يمكنك سحب من 1 إلى 50 مانجا في المرة الواحدة
               </p>
             </div>
+
+            {catalogLoading && (
+              <div className="space-y-2">
+                <Progress value={progress} className="w-full" />
+                <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span>{progressMessage}</span>
+                </div>
+              </div>
+            )}
 
             <Button 
               onClick={scrapeCatalog} 

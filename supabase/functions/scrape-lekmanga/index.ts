@@ -162,12 +162,12 @@ async function loadScraperConfig(supabase: any, sourceName: string) {
       selectors: {
         title: [".post-title h1", "h1.entry-title", ".series-title", ".entry-title", "h1"],
         cover: [".series-thumb img", ".summary_image img", "img.wp-post-image", ".thumb img", ".cover img"],
-        description: [".series-synops", ".summary__content", ".entry-content[itemprop='description']", ".description", ".manga-description"],
+        description: [".entry-content[itemprop='description'] p", ".series-synops", ".summary__content p", ".description", ".manga-description"],
         status: [".status .summary-content", ".series-status", ".spe span:last-child", ".manga-status"],
         genres: [".series-genres a", ".genres-content a", ".mgen a", "a[rel='tag']"],
-        author: [".author-content", ".series-author", ".fmed b"],
-        artist: [".artist-content", ".series-artist"],
-        rating: [".rating .num", ".series-rating", "[itemprop='ratingValue']"],
+        author: [".author-content", ".series-author", ".fmed b", ".author"],
+        artist: [".artist-content", ".series-artist", ".artist"],
+        rating: [".num[itemprop='ratingValue']", ".rating .num", ".series-rating", "[itemprop='ratingValue']"],
         chapters: [".eplister ul li", "li.wp-manga-chapter", ".chapter-item"],
         chapterTitle: ["a .chapternum", "a", ".chapternum"],
         chapterUrl: ["a"],
@@ -662,12 +662,20 @@ async function scrapeChapterPages(chapterUrl: string, source: string, supabase: 
       console.log(`[Pages] Found ${imageElements.length} images with: ${imageSelector}`);
       
       for (let index = 0; index < imageElements.length; index++) {
-        const img = imageElements[index] as any; // Type assertion for DOM element
+        const img = imageElements[index] as any;
         let imageUrl = img.getAttribute('src') || img.getAttribute('data-src') || img.getAttribute('data-lazy-src') || '';
         
         if (imageUrl) {
+          // Fix URL construction - don't add baseUrl if already absolute
           if (!imageUrl.startsWith('http')) {
-            imageUrl = imageUrl.startsWith('//') ? 'https:' + imageUrl : config.baseUrl + imageUrl;
+            if (imageUrl.startsWith('//')) {
+              imageUrl = 'https:' + imageUrl;
+            } else if (imageUrl.startsWith('/')) {
+              imageUrl = config.baseUrl + imageUrl;
+            } else {
+              // Relative path without leading slash
+              imageUrl = config.baseUrl + '/' + imageUrl;
+            }
           }
           
           // Download and upload to storage
@@ -676,7 +684,7 @@ async function scrapeChapterPages(chapterUrl: string, source: string, supabase: 
           
           pages.push({
             page_number: index + 1,
-            image_url: uploadedUrl || imageUrl, // Use uploaded URL if successful, fallback to original
+            image_url: uploadedUrl || imageUrl,
           });
         }
       }
