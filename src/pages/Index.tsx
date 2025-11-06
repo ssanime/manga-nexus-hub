@@ -2,8 +2,9 @@ import { Navbar } from "@/components/Navbar";
 import { HeroSection } from "@/components/HeroSection";
 import { MangaCarousel } from "@/components/MangaCarousel";
 import { LatestChapters } from "@/components/LatestChapters";
+import { LatestWorks } from "@/components/LatestWorks";
 import { Button } from "@/components/ui/button";
-import { Settings, ArrowRight, Flame, TrendingUp, Clock } from "lucide-react";
+import { Settings, ArrowRight, Flame, TrendingUp, Clock, Sparkles } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useEffect, useState } from "react";
@@ -112,8 +113,19 @@ const Index = () => {
         <MangaCarousel manga={trendingManga} size="medium" />
       </section>
 
-      {/* Latest Chapters */}
+      {/* Latest Works */}
       <section className="container mx-auto px-4 py-12">
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-3">
+            <Sparkles className="h-7 w-7 text-primary" />
+            <h2 className="text-3xl font-bold text-foreground">آخر الأعمال</h2>
+          </div>
+        </div>
+        <LatestWorks />
+      </section>
+
+      {/* Latest Chapters */}
+      <section className="container mx-auto px-4 py-12 bg-card/30">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
             <Clock className="h-7 w-7 text-primary" />

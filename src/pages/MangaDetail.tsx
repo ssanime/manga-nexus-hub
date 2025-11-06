@@ -8,6 +8,7 @@ import { Link, useParams, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useEffect, useState } from "react";
+import { useToast } from "@/hooks/use-toast";
 
 interface ChapterCardProps {
   chapter: any;
@@ -90,6 +91,95 @@ const ChapterCard = ({ chapter, mangaSlug, formatDate, formatViews }: ChapterCar
 const MangaDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { toast } = useToast();
+  const [user, setUser] = useState<any>(null);
+  const [isFavorite, setIsFavorite] = useState(false);
+
+  useEffect(() => {
+    checkUser();
+  }, []);
+
+  const checkUser = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    setUser(user);
+    if (user && manga) {
+      checkFavorite(user.id);
+    }
+  };
+
+  const checkFavorite = async (userId: string) => {
+    if (!manga) return;
+    const { data } = await supabase
+      .from('manga_favorites')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('manga_id', manga.id)
+      .maybeSingle();
+    
+    setIsFavorite(!!data);
+  };
+
+  const toggleFavorite = async () => {
+    if (!user) {
+      toast({
+        title: "تسجيل الدخول مطلوب",
+        description: "يجب تسجيل الدخول لإضافة مانجا للمفضلة",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (isFavorite) {
+      const { error } = await supabase
+        .from('manga_favorites')
+        .delete()
+        .eq('user_id', user.id)
+        .eq('manga_id', manga.id);
+
+      if (!error) {
+        setIsFavorite(false);
+        toast({
+          title: "تم الإزالة",
+          description: "تم إزالة المانجا من المفضلة",
+        });
+      }
+    } else {
+      const { error } = await supabase
+        .from('manga_favorites')
+        .insert({
+          user_id: user.id,
+          manga_id: manga.id,
+        });
+
+      if (!error) {
+        setIsFavorite(true);
+        toast({
+          title: "تمت الإضافة",
+          description: "تمت إضافة المانجا للمفضلة",
+        });
+      }
+    }
+  };
+
+  const shareManga = async () => {
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: manga.title,
+          text: `اقرأ ${manga.title} على Mangafas`,
+          url: window.location.href,
+        });
+      } catch (err) {
+        console.error('Error sharing:', err);
+      }
+    } else {
+      navigator.clipboard.writeText(window.location.href);
+      toast({
+        title: "تم النسخ",
+        description: "تم نسخ رابط المانجا",
+      });
+    }
+  };
 
   // Fetch manga data
   const { data: manga, isLoading: mangaLoading, error: mangaError } = useQuery({
@@ -287,11 +377,11 @@ const MangaDetail = () => {
                   </Button>
                 </Link>
               )}
-              <Button variant="outline">
-                <Heart className="mr-2 h-5 w-5" />
-                أضف للمفضلة
+              <Button variant="outline" onClick={toggleFavorite}>
+                <Heart className={`mr-2 h-5 w-5 ${isFavorite ? 'fill-red-500 text-red-500' : ''}`} />
+                {isFavorite ? 'إزالة من المفضلة' : 'أضف للمفضلة'}
               </Button>
-              <Button variant="outline">
+              <Button variant="outline" onClick={shareManga}>
                 <Share2 className="mr-2 h-5 w-5" />
                 مشاركة
               </Button>

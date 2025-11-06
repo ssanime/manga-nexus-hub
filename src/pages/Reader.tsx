@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ChevronLeft, ChevronRight, Home, List, X, Loader2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Home, List, X, Loader2, Heart, Share2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/components/ui/use-toast";
@@ -17,6 +17,94 @@ const Reader = () => {
   const [chapter, setChapter] = useState<any>(null);
   const [pages, setPages] = useState<string[]>([]);
   const [allChapters, setAllChapters] = useState<any[]>([]);
+  const [user, setUser] = useState<any>(null);
+  const [isFavorite, setIsFavorite] = useState(false);
+
+  useEffect(() => {
+    checkUser();
+  }, [manga]);
+
+  const checkUser = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    setUser(user);
+    if (user && manga) {
+      checkFavorite(user.id);
+    }
+  };
+
+  const checkFavorite = async (userId: string) => {
+    if (!manga) return;
+    const { data } = await supabase
+      .from('manga_favorites')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('manga_id', manga.id)
+      .maybeSingle();
+    
+    setIsFavorite(!!data);
+  };
+
+  const toggleFavorite = async () => {
+    if (!user) {
+      toast({
+        title: "تسجيل الدخول مطلوب",
+        description: "يجب تسجيل الدخول لإضافة مانجا للمفضلة",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (isFavorite) {
+      const { error } = await supabase
+        .from('manga_favorites')
+        .delete()
+        .eq('user_id', user.id)
+        .eq('manga_id', manga.id);
+
+      if (!error) {
+        setIsFavorite(false);
+        toast({
+          title: "تم الإزالة",
+          description: "تم إزالة المانجا من المفضلة",
+        });
+      }
+    } else {
+      const { error } = await supabase
+        .from('manga_favorites')
+        .insert({
+          user_id: user.id,
+          manga_id: manga.id,
+        });
+
+      if (!error) {
+        setIsFavorite(true);
+        toast({
+          title: "تمت الإضافة",
+          description: "تمت إضافة المانجا للمفضلة",
+        });
+      }
+    }
+  };
+
+  const shareChapter = async () => {
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: `${manga.title} - الفصل ${chapter.chapter_number}`,
+          text: `اقرأ ${manga.title} الفصل ${chapter.chapter_number} على Mangafas`,
+          url: window.location.href,
+        });
+      } catch (err) {
+        console.error('Error sharing:', err);
+      }
+    } else {
+      navigator.clipboard.writeText(window.location.href);
+      toast({
+        title: "تم النسخ",
+        description: "تم نسخ رابط الفصل",
+      });
+    }
+  };
 
   useEffect(() => {
     loadChapterData();
@@ -193,6 +281,24 @@ const Reader = () => {
                   <Home className="h-5 w-5" />
                 </Button>
               </Link>
+
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                className="text-white hover:bg-white/10"
+                onClick={toggleFavorite}
+              >
+                <Heart className={`h-5 w-5 ${isFavorite ? 'fill-red-500 text-red-500' : ''}`} />
+              </Button>
+
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                className="text-white hover:bg-white/10"
+                onClick={shareChapter}
+              >
+                <Share2 className="h-5 w-5" />
+              </Button>
             </div>
           </div>
         </div>

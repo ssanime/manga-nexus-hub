@@ -3,7 +3,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { BookOpen, Eye, Clock, Image as ImageIcon } from "lucide-react";
+import { Star, BookOpen, Eye } from "lucide-react";
 import {
   Pagination,
   PaginationContent,
@@ -13,54 +13,39 @@ import {
   PaginationPrevious,
 } from "@/components/ui/pagination";
 
-export const LatestChapters = () => {
-  const [chapters, setChapters] = useState<any[]>([]);
+export const LatestWorks = () => {
+  const [manga, setManga] = useState<any[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
-  const itemsPerPage = 20;
+  const itemsPerPage = 25; // 5x5 grid
 
   useEffect(() => {
-    fetchLatestChapters();
+    fetchLatestWorks();
   }, [currentPage]);
 
-  const fetchLatestChapters = async () => {
+  const fetchLatestWorks = async () => {
     const from = (currentPage - 1) * itemsPerPage;
     const to = from + itemsPerPage - 1;
 
     const { count } = await supabase
-      .from("chapters")
-      .select("*", { count: "exact", head: true });
+      .from("manga")
+      .select("*", { count: "exact", head: true })
+      .eq("publish_status", "published");
 
     if (count) {
       setTotalPages(Math.ceil(count / itemsPerPage));
     }
 
     const { data, error } = await supabase
-      .from("chapters")
-      .select(`
-        *,
-        manga:manga_id (
-          id,
-          slug,
-          title,
-          cover_url
-        )
-      `)
+      .from("manga")
+      .select("*")
+      .eq("publish_status", "published")
       .order("created_at", { ascending: false })
       .range(from, to);
 
     if (data && !error) {
-      setChapters(data);
+      setManga(data);
     }
-  };
-
-  const formatDate = (date: string | null) => {
-    if (!date) return 'غير محدد';
-    
-    const d = new Date(date);
-    const months = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 
-                    'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
-    return `${d.getDate()} ${months[d.getMonth()]}`;
   };
 
   const formatViews = (views: number) => {
@@ -71,53 +56,46 @@ export const LatestChapters = () => {
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-        {chapters.map((chapter) => (
-          <Link
-            key={chapter.id}
-            to={`/read/${chapter.manga?.slug}/${chapter.chapter_number}`}
-          >
-            <Card className="overflow-hidden hover:bg-secondary/50 transition-all cursor-pointer border-border group hover:border-primary/50 h-full">
-              <div className="relative h-48 overflow-hidden bg-secondary">
-                {chapter.manga?.cover_url ? (
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+        {manga.map((item) => (
+          <Link key={item.id} to={`/manga/${item.slug}`}>
+            <Card className="overflow-hidden group cursor-pointer hover:shadow-manga-glow transition-all border-border">
+              <div className="relative h-72 overflow-hidden bg-secondary">
+                {item.cover_url ? (
                   <img
-                    src={chapter.manga.cover_url}
-                    alt={chapter.manga.title}
+                    src={item.cover_url}
+                    alt={item.title}
                     className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110"
                   />
                 ) : (
                   <div className="h-full w-full flex items-center justify-center">
-                    <ImageIcon className="h-12 w-12 text-muted-foreground" />
+                    <BookOpen className="h-16 w-16 text-muted-foreground" />
                   </div>
                 )}
-                <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-3">
-                  <h3 className="font-semibold text-white text-sm line-clamp-1">
-                    {chapter.manga?.title || 'Unknown'}
-                  </h3>
-                </div>
+                {item.is_featured && (
+                  <div className="absolute top-2 right-2 bg-accent text-accent-foreground px-2 py-1 rounded-md text-xs flex items-center gap-1">
+                    <Star className="h-3 w-3" />
+                    مميزة
+                  </div>
+                )}
               </div>
               <div className="p-3 space-y-2">
-                <div className="flex items-center gap-2">
-                  <BookOpen className="h-4 w-4 text-primary" />
-                  <span className="font-semibold text-foreground text-sm">
-                    الفصل {chapter.chapter_number}
-                  </span>
-                </div>
-                {chapter.title && (
-                  <p className="text-xs text-muted-foreground line-clamp-1">
-                    {chapter.title}
-                  </p>
-                )}
-                <div className="flex items-center justify-between text-xs text-muted-foreground">
-                  <div className="flex items-center gap-1">
+                <h3 className="font-semibold text-foreground line-clamp-2 text-sm">
+                  {item.title}
+                </h3>
+                <div className="flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-1 text-muted-foreground">
+                    <Star className="h-3 w-3 text-accent fill-accent" />
+                    <span>{item.rating || 0}</span>
+                  </div>
+                  <div className="flex items-center gap-1 text-muted-foreground">
                     <Eye className="h-3 w-3" />
-                    <span>{formatViews(chapter.views || 0)}</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <Clock className="h-3 w-3" />
-                    <span>{formatDate(chapter.release_date)}</span>
+                    <span>{formatViews(item.views || 0)}</span>
                   </div>
                 </div>
+                <Badge variant="outline" className="text-xs">
+                  {item.chapter_count || 0} فصل
+                </Badge>
               </div>
             </Card>
           </Link>

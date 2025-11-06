@@ -603,7 +603,9 @@ async function scrapeChapters(mangaUrl: string, source: string, supabase: any) {
     if (chapterElements.length > 0) {
       console.log(`[Chapters] Found ${chapterElements.length} chapters with: ${chapterSelector}`);
       
-      chapterElements.forEach((chapterEl: any, index: number) => {
+      // Process ALL chapters without any limits
+      for (let i = 0; i < chapterElements.length; i++) {
+        const chapterEl = chapterElements[i] as any;
         try {
           let chapterUrl = '';
           let title = '';
@@ -618,7 +620,7 @@ async function scrapeChapters(mangaUrl: string, source: string, supabase: any) {
             }
           }
           
-          if (!chapterUrl) return;
+          if (!chapterUrl) continue;
           
           // Extract chapter number
           let chapterNumber = 0;
@@ -627,7 +629,7 @@ async function scrapeChapters(mangaUrl: string, source: string, supabase: any) {
             chapterNumber = parseFloat(numMatch[1]);
           } else {
             const urlMatch = chapterUrl.match(/(\d+\.?\d*)/);
-            chapterNumber = urlMatch ? parseFloat(urlMatch[1]) : chapterElements.length - index;
+            chapterNumber = urlMatch ? parseFloat(urlMatch[1]) : chapterElements.length - i;
           }
 
           // Find date
@@ -650,15 +652,15 @@ async function scrapeChapters(mangaUrl: string, source: string, supabase: any) {
             release_date: releaseDate,
           });
         } catch (e: any) {
-          console.error(`[Chapters] Error processing chapter:`, e?.message || e);
+          console.error(`[Chapters] Error processing chapter ${i + 1}:`, e?.message || e);
         }
-      });
+      }
       
       break; // Found chapters, stop trying other selectors
     }
   }
 
-  console.log(`[Chapters] Success: ${chapters.length} chapters`);
+  console.log(`[Chapters] Success: ${chapters.length} chapters scraped`);
   return chapters;
 }
 
