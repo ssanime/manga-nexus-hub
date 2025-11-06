@@ -184,10 +184,11 @@ async function loadScraperConfig(supabase: any, sourceName: string) {
   return FALLBACK_CONFIGS[sourceName.toLowerCase()] || null;
 }
 
-const MAX_RETRIES = 6;
-const BASE_DELAY = 4000;
-const CLOUDFLARE_RETRY_DELAY = 12000;
-const FETCH_TIMEOUT = 30000; // 30 seconds timeout
+const MAX_RETRIES = 3; // Reduced retries
+const BASE_DELAY = 3000;
+const CLOUDFLARE_RETRY_DELAY = 8000;
+const FETCH_TIMEOUT = 25000; // 25 seconds
+const FUNCTION_TIMEOUT = 50000; // 50 seconds max execution
 
 async function delay(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -863,47 +864,31 @@ async function scrapeCatalog(source: string, limit = 20, supabase: any) {
                 
                 console.log(`[Catalog] ✓ Saved manga: ${manga.title}`);
                 
-                // Scrape all chapters for this manga
+                // Scrape chapter list only (not pages to avoid timeout)
                 await humanDelay();
                 const chaptersData = await scrapeChapters(mangaUrl, source, supabase);
                 
                 if (chaptersData.length > 0) {
-                  console.log(`[Catalog] Found ${chaptersData.length} chapters, saving...`);
+                  console.log(`[Catalog] Found ${chaptersData.length} chapters, saving metadata only...`);
                   
-                  // Save all chapters
+                  // Save chapter metadata only (pages will be scraped on-demand)
                   for (const chapter of chaptersData) {
-                    const { data: savedChapter, error: chapterError } = await supabase
+                    const { error: chapterError } = await supabase
                       .from('chapters')
-                      .upsert({ ...chapter, manga_id: manga.id }, { onConflict: 'manga_id,chapter_number' })
-                      .select()
-                      .single();
+                      .upsert({ ...chapter, manga_id: manga.id }, { onConflict: 'manga_id,chapter_number' });
                     
                     if (chapterError) {
                       console.error(`[Catalog] Error saving chapter ${chapter.chapter_number}:`, chapterError);
-                      continue;
-                    }
-                    
-                    // Scrape chapter pages
-                    if (savedChapter) {
-                      try {
-                        await humanDelay();
-                        const pages = await scrapeChapterPages(chapter.source_url, source, supabase, savedChapter.id);
-                        
-                        // Save pages
-                        for (const page of pages) {
-                          await supabase
-                            .from('chapter_pages')
-                            .upsert({ ...page, chapter_id: savedChapter.id }, { onConflict: 'chapter_id,page_number' });
-                        }
-                        
-                        console.log(`[Catalog] ✓ Saved ${pages.length} pages for chapter ${chapter.chapter_number}`);
-                      } catch (pageError: any) {
-                        console.error(`[Catalog] Error scraping pages for chapter ${chapter.chapter_number}:`, pageError.message);
-                      }
                     }
                   }
                   
-                  console.log(`[Catalog] ✓ Saved all ${chaptersData.length} chapters with pages`);
+                  // Update chapter count
+                  await supabase
+                    .from('manga')
+                    .update({ chapter_count: chaptersData.length })
+                    .eq('id', manga.id);
+                  
+                  console.log(`[Catalog] ✓ Saved ${chaptersData.length} chapters (metadata only)`);
                 }
                 
                 mangaList.push({
@@ -949,6 +934,9 @@ serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
+
+  const startTime = Date.now();
+  const isNearTimeout = () => (Date.now() - startTime) > FUNCTION_TIMEOUT;
 
   try {
     const { url, jobType, chapterId, source = 'onma', limit = 20 }: ScrapeMangaRequest = await req.json();
@@ -1015,38 +1003,33 @@ serve(async (req) => {
         if (jobType === 'chapters') {
           chaptersData = await scrapeChapters(url, source, supabase);
           
-          // Save all chapters and their pages
+          let savedCount = 0;
+          // Save chapter metadata only (NOT pages - to avoid timeout)
           for (const chapter of chaptersData) {
-            const { data: savedChapter, error: chapterError } = await supabase
-              .from('chapters')
-              .upsert({ ...chapter, manga_id: manga.id }, { onConflict: 'manga_id,chapter_number' })
-              .select()
-              .single();
-            
-            if (chapterError) {
-              console.error(`[Chapters] Error saving chapter ${chapter.chapter_number}:`, chapterError);
-              continue;
+            // Check timeout before processing each chapter
+            if (isNearTimeout()) {
+              console.log(`[Chapters] ⚠️ Timeout approaching, saved ${savedCount}/${chaptersData.length} chapters`);
+              break;
             }
             
-            // Scrape and save pages for this chapter
-            if (savedChapter) {
-              try {
-                await humanDelay(); // Be respectful to the server
-                const pages = await scrapeChapterPages(chapter.source_url, source, supabase, savedChapter.id);
-                
-                // Save all pages
-                for (const page of pages) {
-                  await supabase
-                    .from('chapter_pages')
-                    .upsert({ ...page, chapter_id: savedChapter.id }, { onConflict: 'chapter_id,page_number' });
-                }
-                
-                console.log(`[Chapters] ✓ Saved ${pages.length} pages for chapter ${chapter.chapter_number}`);
-              } catch (pageError: any) {
-                console.error(`[Chapters] Error scraping pages for chapter ${chapter.chapter_number}:`, pageError.message);
-              }
+            const { error: chapterError } = await supabase
+              .from('chapters')
+              .upsert({ ...chapter, manga_id: manga.id }, { onConflict: 'manga_id,chapter_number' });
+            
+            if (!chapterError) {
+              savedCount++;
+            } else {
+              console.error(`[Chapters] Error saving chapter ${chapter.chapter_number}:`, chapterError);
             }
           }
+          
+          // Update chapter count
+          await supabase
+            .from('manga')
+            .update({ chapter_count: savedCount })
+            .eq('id', manga.id);
+          
+          console.log(`[Chapters] ✓ Saved ${savedCount} chapters (metadata only)`);
         }
 
         await supabase

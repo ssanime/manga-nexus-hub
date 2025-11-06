@@ -54,8 +54,31 @@ export const ScrapeFromURL = ({ onSuccess }: { onSuccess: () => void }) => {
       setProgress(10);
       setProgressMessage("جاري سحب معلومات المانجا...");
       
-      // Scrape manga info and chapters together
-      const { data: response, error } = await supabase.functions.invoke('scrape-lekmanga', {
+      // Step 1: Scrape manga info first
+      const { data: mangaResponse, error: mangaError } = await supabase.functions.invoke('scrape-lekmanga', {
+        body: {
+          url,
+          jobType: 'manga_info',
+          source: selectedSource,
+        },
+      });
+
+      if (mangaError) {
+        console.error('Manga scrape error:', mangaError);
+        throw mangaError;
+      }
+
+      const manga = mangaResponse?.manga;
+      
+      if (!manga || !manga.title) {
+        throw new Error('لم يتم العثور على بيانات المانجا. قد يكون الموقع محمي أو الرابط غير صحيح');
+      }
+
+      setProgress(40);
+      setProgressMessage(`تم سحب "${manga.title}"، جاري سحب الفصول...`);
+      
+      // Step 2: Scrape chapters (without pages)
+      const { data: chaptersResponse, error: chaptersError } = await supabase.functions.invoke('scrape-lekmanga', {
         body: {
           url,
           jobType: 'chapters',
@@ -63,29 +86,25 @@ export const ScrapeFromURL = ({ onSuccess }: { onSuccess: () => void }) => {
         },
       });
 
-      if (error) {
-        console.error('Scrape error:', error);
-        throw error;
+      if (chaptersError) {
+        console.error('Chapters scrape error:', chaptersError);
+        // Don't throw - manga info is already saved
+        toast({
+          title: "⚠️ تحذير",
+          description: "تم سحب المانجا لكن فشل سحب بعض الفصول. قد تحتاج لإعادة المحاولة.",
+        });
       }
 
-      setProgress(50);
-      setProgressMessage("جاري معالجة الفصول...");
-
-      console.log('Scrape response:', response);
-
-      const manga = response?.manga;
-      const chaptersCount = response?.chaptersCount || 0;
-      
-      if (!manga || !manga.title) {
-        throw new Error('لم يتم العثور على بيانات المانجا. قد يكون الموقع محمي أو الرابط غير صحيح');
-      }
+      const savedCount = chaptersResponse?.saved || 0;
+      const totalCount = chaptersResponse?.total || 0;
+      const partial = chaptersResponse?.partial || false;
 
       setProgress(100);
       setProgressMessage("اكتمل السحب بنجاح!");
 
       toast({
         title: "✅ نجح السحب",
-        description: `تم سحب "${manga.title}" مع ${chaptersCount} فصل`,
+        description: `تم سحب "${manga.title}" مع ${savedCount}${partial ? `/${totalCount}` : ''} فصل${partial ? ' (بعض الفصول لم يتم سحبها بسبب الوقت)' : ''}. الصفحات سيتم سحبها عند فتح الفصل.`,
       });
 
       setUrl("");
@@ -95,12 +114,14 @@ export const ScrapeFromURL = ({ onSuccess }: { onSuccess: () => void }) => {
       
       let errorMsg = error.message || 'حدث خطأ غير معروف';
       
-      if (errorMsg.includes('Cloudflare')) {
-        errorMsg = 'الموقع محمي بـ Cloudflare ولا يمكن السحب منه حالياً. جرب موقع آخر مثل onma.top';
+      if (errorMsg.includes('Cloudflare') || errorMsg.includes('CLOUDFLARE')) {
+        errorMsg = 'الموقع محمي بـ Cloudflare ولا يمكن السحب منه حالياً. جرب موقع آخر.';
       } else if (errorMsg.includes('403') || errorMsg.includes('Anti-bot')) {
         errorMsg = 'الموقع يمنع السحب الآلي. جرب موقع آخر أو انتظر قليلاً';
-      } else if (errorMsg.includes('timeout')) {
-        errorMsg = 'انتهت مهلة الاتصال. جرب مرة أخرى';
+      } else if (errorMsg.includes('timeout') || errorMsg.includes('TIMEOUT')) {
+        errorMsg = 'انتهت مهلة الاتصال. المانجا قد تكون كبيرة جداً. جرب مرة أخرى.';
+      } else if (errorMsg.includes('Network')) {
+        errorMsg = 'فقدان الاتصال بالشبكة. تحقق من اتصالك.';
       }
       
       toast({

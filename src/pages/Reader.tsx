@@ -180,8 +180,57 @@ const Reader = () => {
           description: "فشل تحميل صفحات الفصل",
           variant: "destructive",
         });
+      } else if (!pagesData || pagesData.length === 0) {
+        // No pages found - scrape them on-demand
+        console.log('No pages found, scraping from source...');
+        toast({
+          title: "جاري التحميل",
+          description: "جاري سحب صفحات الفصل من المصدر...",
+        });
+        
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          const response = await supabase.functions.invoke('scrape-lekmanga', {
+            body: {
+              url: chapterData.source_url,
+              jobType: 'pages',
+              chapterId: chapterData.id,
+              source: mangaData.source
+            },
+            headers: session ? { Authorization: `Bearer ${session.access_token}` } : {}
+          });
+
+          if (response.error) {
+            console.error('Scraping error:', response.error);
+            toast({
+              title: "خطأ",
+              description: "فشل سحب صفحات الفصل. حاول مرة أخرى لاحقاً",
+              variant: "destructive",
+            });
+          } else {
+            // Reload pages after scraping
+            const { data: newPagesData } = await supabase
+              .from('chapter_pages')
+              .select('*')
+              .eq('chapter_id', chapterData.id)
+              .order('page_number', { ascending: true });
+            
+            setPages(newPagesData?.map(p => p.image_url) || []);
+            toast({
+              title: "تم بنجاح",
+              description: `تم تحميل ${newPagesData?.length || 0} صفحة`,
+            });
+          }
+        } catch (scrapeError) {
+          console.error('Failed to scrape pages:', scrapeError);
+          toast({
+            title: "خطأ",
+            description: "فشل سحب الصفحات من المصدر",
+            variant: "destructive",
+          });
+        }
       } else {
-        setPages(pagesData?.map(p => p.image_url) || []);
+        setPages(pagesData.map(p => p.image_url));
       }
     } catch (error) {
       console.error('Error loading chapter data:', error);
