@@ -159,28 +159,6 @@ async function loadScraperConfig(supabase: any, sourceName: string) {
         catalogMangaCover: [".limit img", "img"]
       }
     },
-    "rocksmanga": {
-  baseUrl: "https://rocksmanga.com",
-  selectors: {
-    title: ["h1.entry-title", ".series-title"],
-    cover: [".series-thumb img", ".summary_image img", "img.wp-post-image"],
-    description: [".entry-content p", ".series-synops", ".summary__content p"],
-    status: [".series-status", ".post-status .summary-content"],
-    genres: [".series-genres a", ".genres-content a", ".mgen a"],
-    author: [".series-author", ".author-content"],
-    artist: [".series-artist", ".artist-content"],
-    rating: [".series-rating .num", ".post-total-rating .score"],
-    chapters: [".eplister ul li", "li.wp-manga-chapter"],
-    chapterTitle: ["a .chapternum", "a"],
-    chapterUrl: ["a"],
-    chapterDate: [".chapterdate", ".chapter-release-date"],
-    pageImages: ["#readerarea img", ".rdminimal img", ".reading-content img", "img.wp-manga-chapter-img"],
-    year: [".release-year", ".fmed:contains('Released') b"],
-    catalogMangaCard: [".bs", ".bsx", ".listupd article", ".page-item-detail"],
-    catalogMangaLink: [".bsx a", "a"],
-    catalogMangaCover: ["img", ".limit img"]
-  }
-},
     "lekmanga": {
       baseUrl: "https://lekmanga.net",
       selectors: {
