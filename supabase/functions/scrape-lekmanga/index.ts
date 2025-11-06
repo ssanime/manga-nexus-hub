@@ -137,22 +137,45 @@ async function loadScraperConfig(supabase: any, sourceName: string) {
         catalogMangaCover: [".thumbnail img", "img", ".cover img", ".manga-cover"]
       }
     },
+    "dilar": {
+      baseUrl: "https://dilar.tube",
+      selectors: {
+        title: [".entry-title", "h1.post-title", "h1"],
+        cover: [".thumb img", ".entry-thumb img", "img[itemprop='image']", ".post-thumb img"],
+        description: [".entry-content p", ".summary p", ".description", "[itemprop='description']"],
+        status: [".status", ".imptdt:contains('الحالة') i", ".manga-status"],
+        genres: [".mgen a", ".genre-info a", "a[rel='category tag']"],
+        author: [".imptdt:contains('المؤلف') i", ".author", ".fmed:contains('Author') b"],
+        artist: [".imptdt:contains('الرسام') i", ".artist"],
+        rating: ["[itemprop='ratingValue']", ".rating-prc", ".num"],
+        chapters: [".eplister ul li", ".chapter-list li", "li[class*='chapter']"],
+        chapterTitle: [".chapternum", "a", ".chapter-link"],
+        chapterUrl: ["a"],
+        chapterDate: [".chapterdate", ".date"],
+        pageImages: ["#readerarea img", ".rdminimal img", ".reading-content img"],
+        year: [".fmed:contains('Released') b", ".year"],
+        catalogMangaCard: [".bs", ".bsx", ".listupd article"],
+        catalogMangaLink: ["a"],
+        catalogMangaCover: [".limit img", "img"]
+      }
+    },
     "lekmanga": {
       baseUrl: "https://lekmanga.net",
       selectors: {
-        title: ["h1.entry-title", ".post-title", "h1"],
-        cover: [".summary_image img", "img.wp-post-image", ".manga-cover img"],
-        description: [".summary__content", ".description-summary", ".manga-excerpt"],
-        status: [".post-status .summary-content", ".manga-status"],
-        genres: [".genres-content a", ".manga-genres a"],
-        author: [".author-content", ".manga-author"],
+        title: ["h1.entry-title", ".post-title h1", "h1"],
+        cover: [".summary_image img", "img.wp-post-image", ".tab-summary img"],
+        description: [".summary__content p", ".description-summary p", ".manga-excerpt"],
+        status: [".post-status .summary-content", ".summary-content", ".manga-status"],
+        genres: [".genres-content a", ".manga-genres a", ".mgen a"],
+        author: [".author-content", ".manga-author", ".artist-content a"],
         artist: [".artist-content", ".manga-artist"],
-        chapters: ["li.wp-manga-chapter", ".chapter-item"],
+        rating: ["[itemprop='ratingValue']", ".post-total-rating .score", ".rating-prc"],
+        chapters: ["li.wp-manga-chapter", ".chapter-item", ".listing-chapters_wrap li"],
         chapterTitle: ["a"],
         chapterUrl: ["a"],
-        chapterDate: [".chapter-release-date"],
-        pageImages: [".reading-content img", "img.wp-manga-chapter-img", ".page-break img"],
-        catalogMangaCard: [".page-item-detail", ".manga-item"],
+        chapterDate: [".chapter-release-date", "span.chapter-release-date"],
+        pageImages: [".reading-content img", ".page-break img", "img.wp-manga-chapter-img", "#readerarea img"],
+        catalogMangaCard: [".page-item-detail", ".manga-item", ".c-tabs-item__content"],
         catalogMangaLink: ["a"],
         catalogMangaCover: ["img"]
       }
@@ -724,50 +747,64 @@ async function scrapeChapterPages(chapterUrl: string, source: string, supabase: 
 
   const pages: any[] = [];
   
+  // Try all image selectors and collect ALL images
+  let allImages: any[] = [];
+  
   for (const imageSelector of config.selectors.pageImages) {
     const imageElements = doc.querySelectorAll(imageSelector);
     if (imageElements.length > 0) {
       console.log(`[Pages] Found ${imageElements.length} images with: ${imageSelector}`);
+      allImages = Array.from(imageElements);
+      break; // Use first selector that finds images
+    }
+  }
+  
+  if (allImages.length === 0) {
+    console.warn('[Pages] No images found with any selector');
+    return pages;
+  }
+  
+  console.log(`[Pages] Processing ${allImages.length} images...`);
+  
+  // Process ALL images without limit
+  for (let index = 0; index < allImages.length; index++) {
+    const img = allImages[index] as any;
+    let imageUrl = img.getAttribute('src') || 
+                   img.getAttribute('data-src') || 
+                   img.getAttribute('data-lazy-src') ||
+                   img.getAttribute('data-original') || '';
+    
+    if (imageUrl) {
+      // Clean URL from whitespace, tabs, newlines
+      imageUrl = cleanUrl(imageUrl);
       
-      for (let index = 0; index < imageElements.length; index++) {
-        const img = imageElements[index] as any;
-        let imageUrl = img.getAttribute('src') || img.getAttribute('data-src') || img.getAttribute('data-lazy-src') || '';
-        
-        if (imageUrl) {
-          // Clean URL from whitespace, tabs, newlines
-          imageUrl = cleanUrl(imageUrl);
-          
-          // Fix URL construction - don't add baseUrl if already absolute
-          if (!imageUrl.startsWith('http')) {
-            if (imageUrl.startsWith('//')) {
-              imageUrl = 'https:' + imageUrl;
-            } else if (imageUrl.startsWith('/')) {
-              imageUrl = config.baseUrl + imageUrl;
-            } else {
-              // Relative path without leading slash
-              imageUrl = config.baseUrl + '/' + imageUrl;
-            }
-          }
-          
-          console.log(`[Pages] Processing page ${index + 1}: ${imageUrl.substring(0, 80)}...`);
-          
-          // Download and upload to storage
-          const fileName = `${chapterId}/page-${index + 1}.jpg`;
-          const uploadedUrl = await downloadAndUploadImage(imageUrl, supabase, 'chapter-pages', fileName);
-          
-          if (uploadedUrl) {
-            pages.push({
-              page_number: index + 1,
-              image_url: uploadedUrl,
-            });
-            console.log(`[Pages] ✓ Uploaded page ${index + 1}`);
-          } else {
-            console.error(`[Pages] ✗ Failed to upload page ${index + 1}`);
-          }
+      // Fix URL construction - don't add baseUrl if already absolute
+      if (!imageUrl.startsWith('http')) {
+        if (imageUrl.startsWith('//')) {
+          imageUrl = 'https:' + imageUrl;
+        } else if (imageUrl.startsWith('/')) {
+          imageUrl = config.baseUrl + imageUrl;
+        } else {
+          // Relative path without leading slash
+          imageUrl = config.baseUrl + '/' + imageUrl;
         }
       }
       
-      break;
+      console.log(`[Pages] Processing page ${index + 1}/${allImages.length}: ${imageUrl.substring(0, 60)}...`);
+      
+      // Download and upload to storage
+      const fileName = `${chapterId}/page-${index + 1}.jpg`;
+      const uploadedUrl = await downloadAndUploadImage(imageUrl, supabase, 'chapter-pages', fileName);
+      
+      if (uploadedUrl) {
+        pages.push({
+          page_number: index + 1,
+          image_url: uploadedUrl,
+        });
+        console.log(`[Pages] ✓ Uploaded page ${index + 1}/${allImages.length}`);
+      } else {
+        console.error(`[Pages] ✗ Failed to upload page ${index + 1}`);
+      }
     }
   }
 

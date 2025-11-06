@@ -69,6 +69,34 @@ export const MangaManager = () => {
     }
   };
 
+  const toggleCategory = async (id: string, category: string, currentGenres: string[]) => {
+    const genres = currentGenres || [];
+    const hasCategory = genres.includes(category);
+    
+    const updatedGenres = hasCategory
+      ? genres.filter(g => g !== category)
+      : [...genres, category];
+
+    const { error } = await supabase
+      .from('manga')
+      .update({ genres: updatedGenres })
+      .eq('id', id);
+
+    if (error) {
+      toast({
+        title: "خطأ",
+        description: "فشل تحديث التصنيف",
+        variant: "destructive",
+      });
+    } else {
+      toast({
+        title: "تم بنجاح",
+        description: hasCategory ? `تمت إزالة من ${category}` : `تمت الإضافة إلى ${category}`,
+      });
+      fetchManga();
+    }
+  };
+
   const updateRating = async (id: string, newRating: number) => {
     const { error } = await supabase
       .from('manga')
@@ -207,6 +235,53 @@ export const MangaManager = () => {
                   </div>
                 </div>
 
+                {/* Categories Management */}
+                <div className="border-t border-border pt-4">
+                  <Label className="text-sm font-semibold mb-3 block">التصنيفات</Label>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      variant={item.genres?.includes('الأعمال الرائجة') ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => toggleCategory(item.id, 'الأعمال الرائجة', item.genres || [])}
+                    >
+                      <TrendingUp className="h-4 w-4 mr-2" />
+                      الأعمال الرائجة
+                    </Button>
+                    <Button
+                      variant={item.genres?.includes('الأعمال الشعبية') ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => toggleCategory(item.id, 'الأعمال الشعبية', item.genres || [])}
+                    >
+                      <Flame className="h-4 w-4 mr-2" />
+                      الأعمال الشعبية
+                    </Button>
+                    <Button
+                      variant={item.genres?.includes('المانجا المشهورة') ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => toggleCategory(item.id, 'المانجا المشهورة', item.genres || [])}
+                    >
+                      <Star className="h-4 w-4 mr-2" />
+                      المانجا المشهورة
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Edit Dialog */}
+                <Dialog>
+                  <DialogTrigger asChild>
+                    <Button variant="outline" size="sm" className="w-full">
+                      <Edit className="h-4 w-4 mr-2" />
+                      تعديل معلومات المانجا
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+                    <DialogHeader>
+                      <DialogTitle>تعديل: {item.title}</DialogTitle>
+                    </DialogHeader>
+                    <EditMangaForm manga={item} onUpdate={fetchManga} />
+                  </DialogContent>
+                </Dialog>
+
                 <div className="flex gap-2">
                   <Dialog>
                     <DialogTrigger asChild>
@@ -310,5 +385,97 @@ const ChaptersList = ({ mangaId, onDeleteChapter }: { mangaId: string; onDeleteC
         ))
       )}
     </div>
+  );
+};
+
+const EditMangaForm = ({ manga, onUpdate }: { manga: any; onUpdate: () => void }) => {
+  const { toast } = useToast();
+  const [formData, setFormData] = useState({
+    title: manga.title || '',
+    description: manga.description || '',
+    author: manga.author || '',
+    artist: manga.artist || '',
+    status: manga.status || 'ongoing',
+  });
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    const { error } = await supabase
+      .from('manga')
+      .update(formData)
+      .eq('id', manga.id);
+
+    if (error) {
+      toast({
+        title: "خطأ",
+        description: "فشل تحديث المانجا",
+        variant: "destructive",
+      });
+    } else {
+      toast({
+        title: "تم بنجاح",
+        description: "تم تحديث معلومات المانجا",
+      });
+      onUpdate();
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div>
+        <Label>العنوان</Label>
+        <Input
+          value={formData.title}
+          onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+          required
+        />
+      </div>
+
+      <div>
+        <Label>الوصف</Label>
+        <textarea
+          className="w-full min-h-[100px] rounded-md border border-input bg-background px-3 py-2"
+          value={formData.description}
+          onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+        />
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <Label>المؤلف</Label>
+          <Input
+            value={formData.author}
+            onChange={(e) => setFormData({ ...formData, author: e.target.value })}
+          />
+        </div>
+
+        <div>
+          <Label>الرسام</Label>
+          <Input
+            value={formData.artist}
+            onChange={(e) => setFormData({ ...formData, artist: e.target.value })}
+          />
+        </div>
+      </div>
+
+      <div>
+        <Label>الحالة</Label>
+        <select
+          className="w-full rounded-md border border-input bg-background px-3 py-2"
+          value={formData.status}
+          onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+        >
+          <option value="ongoing">مستمر</option>
+          <option value="completed">مكتمل</option>
+          <option value="hiatus">متوقف</option>
+          <option value="cancelled">ملغي</option>
+        </select>
+      </div>
+
+      <Button type="submit" className="w-full">
+        حفظ التغييرات
+      </Button>
+    </form>
   );
 };
