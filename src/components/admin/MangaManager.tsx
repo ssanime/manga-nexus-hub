@@ -240,28 +240,20 @@ export const MangaManager = () => {
                   <Label className="text-sm font-semibold mb-3 block">التصنيفات</Label>
                   <div className="flex flex-wrap gap-2">
                     <Button
-                      variant={item.genres?.includes('الأعمال الرائجة') ? 'default' : 'outline'}
+                      variant={item.genres?.includes('رائج') ? 'default' : 'outline'}
                       size="sm"
-                      onClick={() => toggleCategory(item.id, 'الأعمال الرائجة', item.genres || [])}
+                      onClick={() => toggleCategory(item.id, 'رائج', item.genres || [])}
                     >
                       <TrendingUp className="h-4 w-4 mr-2" />
                       الأعمال الرائجة
                     </Button>
                     <Button
-                      variant={item.genres?.includes('الأعمال الشعبية') ? 'default' : 'outline'}
+                      variant={item.genres?.includes('شعبي') ? 'default' : 'outline'}
                       size="sm"
-                      onClick={() => toggleCategory(item.id, 'الأعمال الشعبية', item.genres || [])}
+                      onClick={() => toggleCategory(item.id, 'شعبي', item.genres || [])}
                     >
                       <Flame className="h-4 w-4 mr-2" />
                       الأعمال الشعبية
-                    </Button>
-                    <Button
-                      variant={item.genres?.includes('المانجا المشهورة') ? 'default' : 'outline'}
-                      size="sm"
-                      onClick={() => toggleCategory(item.id, 'المانجا المشهورة', item.genres || [])}
-                    >
-                      <Star className="h-4 w-4 mr-2" />
-                      المانجا المشهورة
                     </Button>
                   </div>
                 </div>

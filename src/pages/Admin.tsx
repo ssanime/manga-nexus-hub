@@ -10,6 +10,7 @@ import { Database, Download, RefreshCw, CheckCircle, XCircle, Clock, Plus, BookP
 import { Badge } from "@/components/ui/badge";
 import { AddMangaForm } from "@/components/admin/AddMangaForm";
 import { AddChapterForm } from "@/components/admin/AddChapterForm";
+import { AddChapterFromSource } from "@/components/admin/AddChapterFromSource";
 import { SourcesManager } from "@/components/admin/SourcesManager";
 import { ScrapeFromURL } from "@/components/admin/ScrapeFromURL";
 import { CloudflareNotice } from "@/components/admin/CloudflareNotice";
@@ -271,14 +272,15 @@ const Admin = () => {
 
           {/* Tabs */}
           <Tabs defaultValue="manga" className="w-full">
-            <TabsList className="grid w-full max-w-6xl grid-cols-10">
+            <TabsList className="grid w-full max-w-6xl grid-cols-11">
               <TabsTrigger value="manage">إدارة المانجا</TabsTrigger>
               <TabsTrigger value="manga">مانجا</TabsTrigger>
               <TabsTrigger value="manhwa">مانهوا</TabsTrigger>
               <TabsTrigger value="manhua">مانها</TabsTrigger>
               <TabsTrigger value="teams"><Users className="w-4 h-4 mr-2" />الفرق</TabsTrigger>
               <TabsTrigger value="add-manga"><Plus className="w-4 h-4 mr-2" />إضافة</TabsTrigger>
-              <TabsTrigger value="add-chapter"><BookPlus className="w-4 h-4 mr-2" />فصل</TabsTrigger>
+              <TabsTrigger value="add-chapter"><BookPlus className="w-4 h-4 mr-2" />فصل يدوي</TabsTrigger>
+              <TabsTrigger value="add-chapter-source"><Globe className="w-4 h-4 mr-2" />فصل من رابط</TabsTrigger>
               <TabsTrigger value="sources"><Globe className="w-4 h-4 mr-2" />المصادر</TabsTrigger>
               <TabsTrigger value="jobs"><Database className="w-4 h-4 mr-2" />المهام</TabsTrigger>
               <TabsTrigger value="backup"><Download className="w-4 h-4 mr-2" />نسخ احتياطي</TabsTrigger>
@@ -436,13 +438,27 @@ const Admin = () => {
               <div className="space-y-4">
                 <div>
                   <h2 className="text-2xl font-bold text-foreground mb-2">
-                    إضافة فصل جديد
+                    إضافة فصل يدوياً
                   </h2>
                   <p className="text-muted-foreground">
-                    أضف فصل جديد لإحدى المانجا الموجودة
+                    ارفع صور الفصل يدوياً من جهازك
                   </p>
                 </div>
                 <AddChapterForm onSuccess={() => { fetchManga(); }} />
+              </div>
+            </TabsContent>
+
+            <TabsContent value="add-chapter-source" className="mt-6">
+              <div className="space-y-4">
+                <div>
+                  <h2 className="text-2xl font-bold text-foreground mb-2">
+                    إضافة فصل من رابط
+                  </h2>
+                  <p className="text-muted-foreground">
+                    اسحب فصل مباشرة من أي موقع مدعوم (يمكنك سحب فصول من موقع مختلف عن المصدر الأصلي)
+                  </p>
+                </div>
+                <AddChapterFromSource onSuccess={() => { fetchManga(); fetchJobs(); }} />
               </div>
             </TabsContent>
 

@@ -19,13 +19,13 @@ export const MangaCarousel = ({ manga, size = "medium" }: MangaCarouselProps) =>
     dragFree: true
   });
 
-  // Auto scroll
+  // Auto scroll every 5 seconds
   useEffect(() => {
     if (!emblaApi) return;
 
     const autoScroll = setInterval(() => {
       emblaApi.scrollNext();
-    }, 3000);
+    }, 5000); // Changed from 3000 to 5000ms
 
     return () => clearInterval(autoScroll);
   }, [emblaApi]);

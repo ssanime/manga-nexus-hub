@@ -1,1 +1,7 @@
 project_id = "kclwkzibsueqrtpapeji"
+
+[functions.scrape-lekmanga]
+verify_jwt = true
+
+[functions.cloudflare-bypass]
+verify_jwt = true
