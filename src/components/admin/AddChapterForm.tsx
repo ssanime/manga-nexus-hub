@@ -83,12 +83,15 @@ export const AddChapterForm = ({ onSuccess }: { onSuccess: () => void }) => {
           manga_id: selectedManga,
           chapter_number: parseFloat(chapterNumber),
           title: chapterTitle || `الفصل ${chapterNumber}`,
-          source_url: '',
+          source_url: 'manual-upload',
         })
         .select()
         .single();
 
-      if (chapterError) throw chapterError;
+      if (chapterError) {
+        console.error('Chapter insert error:', chapterError);
+        throw chapterError;
+      }
 
       // Upload pages
       const pagePromises = pageFiles.map(async (file, index) => {

@@ -221,7 +221,7 @@ async function humanDelay(): Promise<void> {
   await delay(getRandomDelay(1000, 3000));
 }
 
-// Smart HTML fetcher with enhanced anti-bot evasion and timeout handling
+// Smart HTML fetcher with enhanced anti-bot evasion and Cloudflare bypass integration
 async function fetchHTML(url: string, config: any, retryCount = 0): Promise<string> {
   try {
     console.log(`[Fetch] Attempt ${retryCount + 1}/${MAX_RETRIES + 1}: ${url}`);
@@ -251,7 +251,7 @@ async function fetchHTML(url: string, config: any, retryCount = 0): Promise<stri
     
     if (!response.ok) {
       if (response.status === 403) {
-        console.error('[Fetch] 403 Forbidden - Cloudflare or anti-bot protection active');
+        console.error('[Fetch] 403 Forbidden - Trying Cloudflare bypass...');
         throw new Error('CLOUDFLARE_BLOCK');
       }
       if (response.status === 503) {
@@ -271,15 +271,13 @@ async function fetchHTML(url: string, config: any, retryCount = 0): Promise<stri
 
     const html = await response.text();
     
-    // Enhanced Cloudflare detection - require multiple strong indicators
-    // Check for Cloudflare-specific response headers first
+    // Enhanced Cloudflare detection
     const cfHeaders = response.headers.get('cf-ray') || 
                      response.headers.get('cf-cache-status') ||
                      response.headers.get('server')?.toLowerCase().includes('cloudflare');
     
     const lowerHtml = html.toLowerCase();
     
-    // Strong indicators that appear ONLY in actual Cloudflare challenges
     const strongChallengeIndicators = [
       'cf-browser-verification',
       '__cf_chl_jschl_tk__',
@@ -287,24 +285,18 @@ async function fetchHTML(url: string, config: any, retryCount = 0): Promise<stri
       'cf_chl_opt'
     ];
     
-    // Title check - most reliable indicator
     const isChallengeTitle = lowerHtml.includes('<title>just a moment') || 
                             lowerHtml.includes('<title>attention required');
     
-    // Body checks - require specific challenge page content
     const hasChallengeContent = (
       lowerHtml.includes('enable javascript and cookies to continue') ||
       lowerHtml.includes('checking if the site connection is secure') ||
       lowerHtml.includes('checking your browser before accessing')
     );
     
-    // Count strong indicators present
     const strongIndicatorsCount = strongChallengeIndicators.filter(p => lowerHtml.includes(p)).length;
-    
-    // Cloudflare Ray ID in specific format (only in challenge pages)
     const hasRayIdInError = /ray id: [a-f0-9]{16}/.test(lowerHtml);
     
-    // Must have MULTIPLE indicators to confirm it's actually a Cloudflare challenge
     const isActualChallenge = (
       isChallengeTitle ||
       (strongIndicatorsCount >= 2) ||
@@ -313,13 +305,7 @@ async function fetchHTML(url: string, config: any, retryCount = 0): Promise<stri
     );
     
     if (isActualChallenge) {
-      const detectedIndicators: string[] = [];
-      if (isChallengeTitle) detectedIndicators.push('challenge-title');
-      if (hasChallengeContent) detectedIndicators.push('challenge-content');
-      if (cfHeaders) detectedIndicators.push('cf-headers');
-      if (strongIndicatorsCount > 0) detectedIndicators.push(`${strongIndicatorsCount}-strong-indicators`);
-      
-      console.error(`[Fetch] Cloudflare challenge confirmed: ${detectedIndicators.join(', ')}`);
+      console.error(`[Fetch] Cloudflare challenge detected - attempting bypass...`);
       throw new Error('CLOUDFLARE_CHALLENGE');
     }
     
@@ -329,7 +315,6 @@ async function fetchHTML(url: string, config: any, retryCount = 0): Promise<stri
       throw new Error('EMPTY_RESPONSE');
     }
     
-    // Verify we got HTML content
     if (!html.includes('<html') && !html.includes('<!DOCTYPE')) {
       console.error('[Fetch] Response does not appear to be HTML');
       throw new Error('INVALID_HTML');
@@ -340,6 +325,35 @@ async function fetchHTML(url: string, config: any, retryCount = 0): Promise<stri
   } catch (error: any) {
     const errorMsg = error?.message || String(error);
     console.error(`[Fetch] Error on attempt ${retryCount + 1}:`, errorMsg);
+    
+    // Try Cloudflare bypass for specific errors
+    if ((errorMsg === 'CLOUDFLARE_BLOCK' || errorMsg === 'CLOUDFLARE_CHALLENGE') && retryCount === 0) {
+      console.log('[Fetch] Attempting Cloudflare bypass via edge function...');
+      try {
+        const supabaseUrl = Deno.env.get('SUPABASE_URL');
+        const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+        
+        const bypassResponse = await fetch(`${supabaseUrl}/functions/v1/cloudflare-bypass`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${supabaseKey}`,
+          },
+          body: JSON.stringify({ url }),
+        });
+        
+        const bypassData = await bypassResponse.json();
+        
+        if (bypassData.success && bypassData.html) {
+          console.log('[Fetch] ✓ Cloudflare bypass successful!');
+          return bypassData.html;
+        } else {
+          console.error('[Fetch] Cloudflare bypass failed:', bypassData.error);
+        }
+      } catch (bypassError) {
+        console.error('[Fetch] Bypass error:', bypassError);
+      }
+    }
     
     // Handle AbortError (timeout)
     if (error.name === 'AbortError') {

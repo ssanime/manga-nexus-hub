@@ -9,36 +9,36 @@ export const HeroSection = () => {
 
   useEffect(() => {
     const fetchPopularContent = async () => {
-      // Fetch popular Manga
-      const { data: manga } = await supabase
+      // Fetch "الأعمال الرائجة" - Trending Works
+      const { data: trending } = await supabase
         .from("manga")
         .select("*")
         .eq('publish_status', 'published')
-        .contains("genres", ["Manga"])
+        .contains("genres", ["رائج"])
         .order("views", { ascending: false })
         .limit(10);
       
-      // Fetch popular Manhwa
-      const { data: manhwa } = await supabase
+      // Fetch "الأعمال الشعبية" - Popular Works
+      const { data: popular } = await supabase
         .from("manga")
         .select("*")
         .eq('publish_status', 'published')
-        .contains("genres", ["Manhwa"])
+        .contains("genres", ["شعبي"])
         .order("views", { ascending: false })
         .limit(10);
       
-      // Fetch popular Manhua
-      const { data: manhua } = await supabase
+      // Fetch "المانجا المشهورة" - Featured/Famous Manga
+      const { data: featured } = await supabase
         .from("manga")
         .select("*")
         .eq('publish_status', 'published')
-        .contains("genres", ["Manhua"])
+        .eq('is_featured', true)
         .order("views", { ascending: false })
         .limit(10);
 
-      setPopularManga(manga || []);
-      setPopularManhwa(manhwa || []);
-      setPopularManhua(manhua || []);
+      setPopularManga(featured || []);
+      setPopularManhwa(trending || []);
+      setPopularManhua(popular || []);
     };
 
     fetchPopularContent();
@@ -53,41 +53,41 @@ export const HeroSection = () => {
       </div>
 
       <div className="container relative z-10 mx-auto px-4 space-y-12">
-        {/* Popular Manga */}
-        <div>
-          <h2 className="text-2xl md:text-3xl font-bold mb-6 text-center">
-            <span className="bg-manga-gradient bg-clip-text text-transparent">
-              المانجا المشهورة
-            </span>
-          </h2>
-          {popularManga.length > 0 && (
+        {/* المانجا المشهورة - Featured/Famous */}
+        {popularManga.length > 0 && (
+          <div>
+            <h2 className="text-2xl md:text-3xl font-bold mb-6 text-center">
+              <span className="bg-manga-gradient bg-clip-text text-transparent">
+                المانجا المشهورة
+              </span>
+            </h2>
             <MangaCarousel manga={popularManga} size="large" />
-          )}
-        </div>
+          </div>
+        )}
 
-        {/* Popular Manhwa */}
-        <div>
-          <h2 className="text-2xl md:text-3xl font-bold mb-6 text-center">
-            <span className="bg-manga-gradient bg-clip-text text-transparent">
-              المانهوات المشهورة
-            </span>
-          </h2>
-          {popularManhwa.length > 0 && (
+        {/* الأعمال الرائجة - Trending Works */}
+        {popularManhwa.length > 0 && (
+          <div>
+            <h2 className="text-2xl md:text-3xl font-bold mb-6 text-center">
+              <span className="bg-manga-gradient bg-clip-text text-transparent">
+                الأعمال الرائجة
+              </span>
+            </h2>
             <MangaCarousel manga={popularManhwa} size="large" />
-          )}
-        </div>
+          </div>
+        )}
 
-        {/* Popular Manhua */}
-        <div>
-          <h2 className="text-2xl md:text-3xl font-bold mb-6 text-center">
-            <span className="bg-manga-gradient bg-clip-text text-transparent">
-              المانهات المشهورة
-            </span>
-          </h2>
-          {popularManhua.length > 0 && (
+        {/* الأعمال الشعبية - Popular Works */}
+        {popularManhua.length > 0 && (
+          <div>
+            <h2 className="text-2xl md:text-3xl font-bold mb-6 text-center">
+              <span className="bg-manga-gradient bg-clip-text text-transparent">
+                الأعمال الشعبية
+              </span>
+            </h2>
             <MangaCarousel manga={popularManhua} size="large" />
-          )}
-        </div>
+          </div>
+        )}
       </div>
     </section>
   );
