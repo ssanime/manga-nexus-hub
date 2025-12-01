@@ -26,9 +26,55 @@ serve(async (req) => {
       );
     }
 
-    console.log(`[Cloudflare Bypass] Starting bypass for: ${url}`);
+    console.log(`[Cloudflare Bypass] Starting advanced bypass for: ${url}`);
 
-    // Enhanced browser-like headers
+    // Get Firecrawl API key
+    const firecrawlApiKey = Deno.env.get('FIRECRAWL_API_KEY');
+
+    // Strategy 1: Try Firecrawl first (best for Cloudflare)
+    if (firecrawlApiKey) {
+      console.log(`[Bypass] Attempt 1: Using Firecrawl API (advanced browser emulation)`);
+      try {
+        const firecrawlResponse = await fetch('https://api.firecrawl.dev/v1/scrape', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${firecrawlApiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            url,
+            formats: ['html'],
+            waitFor: waitForSelector ? 5000 : 0,
+            timeout: Math.floor(timeout / 1000),
+            actions: waitForSelector ? [{ type: 'wait', selector: waitForSelector }] : undefined,
+          }),
+        });
+
+        if (firecrawlResponse.ok) {
+          const data = await firecrawlResponse.json();
+          if (data.success && data.data?.html) {
+            console.log(`[Bypass] ✓ Firecrawl success! Retrieved ${data.data.html.length} bytes`);
+            return new Response(
+              JSON.stringify({
+                success: true,
+                html: data.data.html,
+                status: 200,
+                method: 'firecrawl',
+              }),
+              { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+        }
+        console.log(`[Bypass] ⚠️ Firecrawl failed, falling back to enhanced fetch`);
+      } catch (firecrawlError) {
+        console.error('[Bypass] Firecrawl error:', firecrawlError);
+      }
+    } else {
+      console.log(`[Bypass] ⚠️ No Firecrawl API key, skipping to enhanced fetch`);
+    }
+
+    // Strategy 2: Enhanced fetch with anti-detection headers
+    console.log(`[Bypass] Attempt 2: Enhanced fetch with anti-detection`);
     const headers: HeadersInit = {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
       'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
@@ -48,8 +94,6 @@ serve(async (req) => {
       'Referer': new URL(url).origin,
     };
 
-    // First attempt: Direct fetch with browser-like headers
-    console.log(`[Bypass] Attempt 1: Direct fetch with enhanced headers`);
     let response = await fetch(url, {
       headers,
       redirect: 'follow',
@@ -62,15 +106,17 @@ serve(async (req) => {
                                    html.includes('Just a moment') ||
                                    html.includes('cf-browser-verification') ||
                                    html.includes('challenge-platform') ||
-                                   response.status === 403;
+                                   html.includes('ray ID') ||
+                                   response.status === 403 ||
+                                   response.status === 503;
 
     if (isCloudflareChallenge) {
-      console.log(`[Bypass] Cloudflare detected. Attempting retry with delay...`);
+      console.log(`[Bypass] ⚠️ Cloudflare detected. Attempting retry with cookies...`);
       
-      // Wait a bit to simulate human behavior
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // Wait to simulate human behavior
+      await new Promise(resolve => setTimeout(resolve, 3000));
 
-      // Second attempt: Retry with cookies
+      // Strategy 3: Retry with cookies
       const cookies = response.headers.get('set-cookie') || '';
       
       response = await fetch(url, {
@@ -86,29 +132,32 @@ serve(async (req) => {
       // Check again
       const stillBlocked = html.includes('Checking your browser') || 
                           html.includes('Just a moment') ||
-                          html.includes('cf-browser-verification');
+                          html.includes('cf-browser-verification') ||
+                          html.includes('challenge-platform');
 
       if (stillBlocked) {
-        console.log(`[Bypass] Still blocked. Cloudflare protection is too strong.`);
+        console.log(`[Bypass] ❌ Still blocked after all attempts`);
         return new Response(
           JSON.stringify({
             success: false,
-            error: 'الموقع محمي بحماية Cloudflare قوية. لا يمكن التخطي حالياً.',
+            error: 'الموقع محمي بحماية Cloudflare قوية. يرجى تفعيل Firecrawl API للتجاوز الكامل.',
             requiresBrowser: true,
-            html: html.substring(0, 500), // Send first 500 chars for debugging
+            method: 'enhanced_fetch_failed',
+            html: html.substring(0, 500),
           }),
           { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
     }
 
-    console.log(`[Bypass] Success! Retrieved ${html.length} bytes`);
+    console.log(`[Bypass] ✓ Enhanced fetch success! Retrieved ${html.length} bytes`);
 
     return new Response(
       JSON.stringify({
         success: true,
         html,
         status: response.status,
+        method: 'enhanced_fetch',
         headers: Object.fromEntries(response.headers.entries()),
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

@@ -3,12 +3,21 @@ import { supabase } from "@/integrations/supabase/client";
 import { MangaCarousel } from "./MangaCarousel";
 
 export const HeroSection = () => {
-  const [popularManga, setPopularManga] = useState<any[]>([]);
-  const [popularManhwa, setPopularManhwa] = useState<any[]>([]);
-  const [popularManhua, setPopularManhua] = useState<any[]>([]);
+  const [featuredManga, setFeaturedManga] = useState<any[]>([]);
+  const [trendingWorks, setTrendingWorks] = useState<any[]>([]);
+  const [popularWorks, setPopularWorks] = useState<any[]>([]);
 
   useEffect(() => {
     const fetchPopularContent = async () => {
+      // Fetch "المانجا المشهورة" - Featured/Famous Manga
+      const { data: featured } = await supabase
+        .from("manga")
+        .select("*")
+        .eq('publish_status', 'published')
+        .eq('is_featured', true)
+        .order("views", { ascending: false })
+        .limit(10);
+      
       // Fetch "الأعمال الرائجة" - Trending Works
       const { data: trending } = await supabase
         .from("manga")
@@ -26,19 +35,10 @@ export const HeroSection = () => {
         .contains("genres", ["شعبي"])
         .order("views", { ascending: false })
         .limit(10);
-      
-      // Fetch "المانجا المشهورة" - Featured/Famous Manga
-      const { data: featured } = await supabase
-        .from("manga")
-        .select("*")
-        .eq('publish_status', 'published')
-        .eq('is_featured', true)
-        .order("views", { ascending: false })
-        .limit(10);
 
-      setPopularManga(featured || []);
-      setPopularManhwa(trending || []);
-      setPopularManhua(popular || []);
+      setFeaturedManga(featured || []);
+      setTrendingWorks(trending || []);
+      setPopularWorks(popular || []);
     };
 
     fetchPopularContent();
@@ -54,38 +54,38 @@ export const HeroSection = () => {
 
       <div className="container relative z-10 mx-auto px-4 space-y-12">
         {/* المانجا المشهورة - Featured/Famous */}
-        {popularManga.length > 0 && (
+        {featuredManga.length > 0 && (
           <div>
             <h2 className="text-2xl md:text-3xl font-bold mb-6 text-center">
               <span className="bg-manga-gradient bg-clip-text text-transparent">
                 المانجا المشهورة
               </span>
             </h2>
-            <MangaCarousel manga={popularManga} size="large" />
+            <MangaCarousel manga={featuredManga} size="large" />
           </div>
         )}
 
         {/* الأعمال الرائجة - Trending Works */}
-        {popularManhwa.length > 0 && (
+        {trendingWorks.length > 0 && (
           <div>
             <h2 className="text-2xl md:text-3xl font-bold mb-6 text-center">
               <span className="bg-manga-gradient bg-clip-text text-transparent">
                 الأعمال الرائجة
               </span>
             </h2>
-            <MangaCarousel manga={popularManhwa} size="large" />
+            <MangaCarousel manga={trendingWorks} size="large" />
           </div>
         )}
 
         {/* الأعمال الشعبية - Popular Works */}
-        {popularManhua.length > 0 && (
+        {popularWorks.length > 0 && (
           <div>
             <h2 className="text-2xl md:text-3xl font-bold mb-6 text-center">
               <span className="bg-manga-gradient bg-clip-text text-transparent">
                 الأعمال الشعبية
               </span>
             </h2>
-            <MangaCarousel manga={popularManhua} size="large" />
+            <MangaCarousel manga={popularWorks} size="large" />
           </div>
         )}
       </div>
