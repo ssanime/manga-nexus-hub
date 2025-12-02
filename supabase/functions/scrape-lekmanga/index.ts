@@ -297,12 +297,13 @@ async function fetchHTML(url: string, config: any, retryCount = 0): Promise<stri
     const strongIndicatorsCount = strongChallengeIndicators.filter(p => lowerHtml.includes(p)).length;
     const hasRayIdInError = /ray id: [a-f0-9]{16}/.test(lowerHtml);
     
-    const isActualChallenge = (
-      isChallengeTitle ||
-      (strongIndicatorsCount >= 2) ||
-      (hasChallengeContent && cfHeaders) ||
-      (hasRayIdInError && hasChallengeContent)
-    );
+      // Improved Cloudflare detection - more accurate
+      const isActualChallenge = (
+        isChallengeTitle ||
+        (strongIndicatorsCount >= 2) ||
+        (hasChallengeContent && cfHeaders && strongIndicatorsCount >= 1) ||
+        (hasRayIdInError && hasChallengeContent && cfHeaders)
+      );
     
     if (isActualChallenge) {
       console.error(`[Fetch] Cloudflare challenge detected - attempting bypass...`);
@@ -852,18 +853,20 @@ async function scrapeCatalog(source: string, limit = 20, supabase: any) {
       const doc = new DOMParser().parseFromString(html, 'text/html');
       if (!doc) continue;
 
-      if (config.selectors.catalogMangaCard) {
+      if (config.selectors.catalogMangaCard && Array.isArray(config.selectors.catalogMangaCard)) {
         for (const cardSelector of config.selectors.catalogMangaCard) {
           const cards = doc.querySelectorAll(cardSelector);
           if (cards.length > 0) {
-            console.log(`[Catalog] Found ${cards.length} manga cards with: ${cardSelector}`);
+            console.log(`[Catalog] ✓ Found ${cards.length} manga cards with: ${cardSelector}`);
             
             for (let i = 0; i < cards.length && mangaList.length < limit; i++) {
               const card = cards[i] as any;
               
               // Try to find link in card
               let mangaUrl = '';
-              for (const linkSelector of config.selectors.catalogMangaLink || ['a']) {
+              const linkSelectors = config.selectors.catalogMangaLink || ['a'];
+              
+              for (const linkSelector of linkSelectors) {
                 const link = card.querySelector(linkSelector);
                 if (link) {
                   let href = link.getAttribute('href') || '';
@@ -875,11 +878,16 @@ async function scrapeCatalog(source: string, limit = 20, supabase: any) {
                              config.baseUrl + '/' + href;
                     }
                     
-                    // Check if it's a valid manga URL
-                    const validPatterns = ['/manga/', '/series/', '/comic/', '/webtoon/'];
+                    // Check if it's a valid manga URL (more flexible patterns)
+                    const validPatterns = ['/manga/', '/series/', '/comic/', '/webtoon/', '/title/', '/work/'];
                     const isValidUrl = validPatterns.some(pattern => href.includes(pattern));
                     
-                    if (isValidUrl) {
+                    // If URL contains the base domain and doesn't look like homepage/category
+                    const notExcluded = !href.match(/\/(page|category|genre|tag|author|artist)\//) && 
+                                       href !== config.baseUrl && 
+                                       href !== config.baseUrl + '/';
+                    
+                    if ((isValidUrl || notExcluded) && href.length > config.baseUrl.length + 5) {
                       mangaUrl = href;
                       break;
                     }
@@ -887,11 +895,17 @@ async function scrapeCatalog(source: string, limit = 20, supabase: any) {
                 }
               }
               
-              if (!mangaUrl) continue;
+              if (!mangaUrl) {
+                console.log(`[Catalog] ⚠️ No valid link found in card ${i + 1}`);
+                continue;
+              }
               
               // Check if already processed
               const alreadyExists = mangaList.some(m => m.url === mangaUrl);
-              if (alreadyExists) continue;
+              if (alreadyExists) {
+                console.log(`[Catalog] ⚠️ Duplicate manga: ${mangaUrl}`);
+                continue;
+              }
               
               console.log(`[Catalog] Processing manga ${mangaList.length + 1}/${limit}: ${mangaUrl}`);
               

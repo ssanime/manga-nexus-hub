@@ -28,25 +28,36 @@ export const CloudflareNotice = () => {
 
       <Alert className="bg-blue-500/10 border-blue-500/50 mb-4">
         <Key className="h-4 w-4 text-blue-500" />
-        <AlertTitle className="text-blue-500">💡 حل مشكلة Cloudflare - Firecrawl API</AlertTitle>
+        <AlertTitle className="text-blue-500">💡 حل مشكلة Cloudflare - تحسينات جديدة!</AlertTitle>
         <AlertDescription className="text-muted-foreground">
           <div className="space-y-3 mt-2">
             <p>
-              لتجاوز حماية Cloudflare بشكل كامل، تحتاج إلى <strong>Firecrawl API Key</strong>
+              <strong>تم تحسين نظام تجاوز Cloudflare!</strong> النظام الآن يستخدم تقنيات متقدمة:
             </p>
             
-            <div className="bg-background/50 p-3 rounded-lg space-y-2">
-              <p className="text-sm font-semibold">خطوات الإعداد:</p>
+            <ul className="list-disc list-inside space-y-1 mr-4 text-sm">
+              <li>User agents عشوائية متنوعة لتجنب الكشف</li>
+              <li>توقيتات عشوائية تحاكي السلوك البشري</li>
+              <li>إعادة محاولات ذكية مع Cookies</li>
+              <li>كشف دقيق لحماية Cloudflare (تقليل الإنذارات الخاطئة)</li>
+            </ul>
+
+            <div className="bg-background/50 p-3 rounded-lg space-y-2 mt-3">
+              <p className="text-sm font-semibold">للحماية القوية - Firecrawl API:</p>
               <ol className="list-decimal list-inside space-y-1 text-sm mr-3">
-                <li>سجل في <a href="https://firecrawl.dev" target="_blank" rel="noopener" className="text-primary hover:underline">firecrawl.dev</a> واحصل على API key</li>
+                <li>سجل في <a href="https://firecrawl.dev" target="_blank" rel="noopener" className="text-primary hover:underline">firecrawl.dev</a> واحصل على API key مع credits كافية</li>
                 <li>اذهب إلى: الإعدادات → Lovable Cloud → Secrets</li>
                 <li>حدّث secret باسم <code className="bg-background px-2 py-0.5 rounded text-primary">FIRECRAWL_API_KEY</code></li>
-                <li>الصق API key الخاص بك</li>
+                <li>الصق API key الجديد</li>
               </ol>
             </div>
 
+            <p className="text-xs text-muted-foreground mt-2">
+              ⚠️ <strong>ملاحظة:</strong> تأكد من أن Firecrawl API key لديك يحتوي على credits كافية. المفتاح الحالي قد يكون منتهي الرصيد (402 error).
+            </p>
+
             <p className="text-xs text-muted-foreground">
-              ✨ بعد إضافة المفتاح، ستتمكن من السحب من المواقع المحمية بـ Cloudflare مثل lekmanga
+              ✨ بدون Firecrawl، النظام يستخدم تقنيات stealth متقدمة تعمل مع معظم المواقع
             </p>
           </div>
         </AlertDescription>
