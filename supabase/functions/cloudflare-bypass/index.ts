@@ -50,24 +50,38 @@ serve(async (req) => {
           }),
         });
 
-        if (firecrawlResponse.ok) {
-          const data = await firecrawlResponse.json();
-          if (data.success && data.data?.html) {
-            console.log(`[Bypass] ✓ Firecrawl success! Retrieved ${data.data.html.length} bytes`);
-            return new Response(
-              JSON.stringify({
-                success: true,
-                html: data.data.html,
-                status: 200,
-                method: 'firecrawl',
-              }),
-              { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-            );
+        const responseData = await firecrawlResponse.json();
+        
+        console.log(`[Bypass] Firecrawl Response Status: ${firecrawlResponse.status}`);
+        
+        if (firecrawlResponse.ok && responseData.success && responseData.data?.html) {
+          console.log(`[Bypass] ✓ Firecrawl success! Retrieved ${responseData.data.html.length} bytes`);
+          return new Response(
+            JSON.stringify({
+              success: true,
+              html: responseData.data.html,
+              status: 200,
+              method: 'firecrawl',
+            }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        } else {
+          // Log detailed error from Firecrawl
+          const errorMsg = responseData.error || responseData.message || 'Unknown error';
+          console.error(`[Bypass] ❌ Firecrawl failed (${firecrawlResponse.status}): ${errorMsg}`);
+          
+          if (firecrawlResponse.status === 401) {
+            console.error('[Bypass] ⚠️ Firecrawl API key is invalid or expired. Please update FIRECRAWL_API_KEY secret.');
+          } else if (firecrawlResponse.status === 402) {
+            console.error('[Bypass] ⚠️ Firecrawl quota exceeded. Please check your plan.');
+          } else if (firecrawlResponse.status === 429) {
+            console.error('[Bypass] ⚠️ Firecrawl rate limit reached. Please wait before trying again.');
           }
+          
+          console.log(`[Bypass] ⚠️ Falling back to enhanced fetch`);
         }
-        console.log(`[Bypass] ⚠️ Firecrawl failed, falling back to enhanced fetch`);
       } catch (firecrawlError) {
-        console.error('[Bypass] Firecrawl error:', firecrawlError);
+        console.error('[Bypass] Firecrawl exception:', firecrawlError);
       }
     } else {
       console.log(`[Bypass] ⚠️ No Firecrawl API key, skipping to enhanced fetch`);

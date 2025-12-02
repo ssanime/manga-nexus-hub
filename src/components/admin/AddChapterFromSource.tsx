@@ -67,19 +67,35 @@ export const AddChapterFromSource = ({ onSuccess }: { onSuccess: () => void }) =
         description: "جاري سحب الفصل من المصدر...",
       });
 
-      // Call edge function to scrape chapter
+      // Call edge function to scrape chapter pages
       const response = await supabase.functions.invoke('scrape-lekmanga', {
         body: {
           url: chapterUrl,
-          jobType: autoDownload ? 'pages' : 'chapters',
+          jobType: 'pages',
           source: selectedSource,
           mangaId: selectedManga,
+          autoDownload: autoDownload,
         },
         headers: session ? { Authorization: `Bearer ${session.access_token}` } : {}
       });
 
       if (response.error) {
-        throw new Error(response.error.message || 'فشل السحب');
+        console.error('Scrape error details:', response.error);
+        
+        // Better error messages based on error type
+        let errorMessage = response.error.message || 'فشل السحب';
+        
+        if (errorMessage.includes('Cloudflare') || errorMessage.includes('CLOUDFLARE')) {
+          errorMessage = '🛡️ الموقع محمي بـ Cloudflare. يرجى التأكد من تفعيل Firecrawl API أو جرب موقع آخر.';
+        } else if (errorMessage.includes('403')) {
+          errorMessage = '⛔ الموقع يمنع الوصول. قد يكون محمي بـ Cloudflare أو يتطلب تسجيل دخول.';
+        } else if (errorMessage.includes('404')) {
+          errorMessage = '❌ الرابط غير موجود. تحقق من صحة الرابط.';
+        } else if (errorMessage.includes('timeout')) {
+          errorMessage = '⏱️ انتهت مهلة الاتصال. حاول مرة أخرى أو جرب فصل أصغر.';
+        }
+        
+        throw new Error(errorMessage);
       }
 
       toast({

@@ -20,6 +20,7 @@ export const ScrapeFromURL = ({ onSuccess }: { onSuccess: () => void }) => {
   const [catalogLimit, setCatalogLimit] = useState("20");
   const [progress, setProgress] = useState(0);
   const [progressMessage, setProgressMessage] = useState("");
+  const [autoDownloadPages, setAutoDownloadPages] = useState(false);
 
   const { data: sources } = useQuery({
     queryKey: ['scraper-sources'],
@@ -99,14 +100,58 @@ export const ScrapeFromURL = ({ onSuccess }: { onSuccess: () => void }) => {
       const totalCount = chaptersResponse?.total || 0;
       const partial = chaptersResponse?.partial || false;
 
+      // Step 3: Download pages if auto-download is enabled
+      if (autoDownloadPages && savedCount > 0) {
+        setProgress(70);
+        setProgressMessage("جاري تحميل صفحات الفصول...");
+        
+        // Get the saved chapters
+        const { data: chapters } = await supabase
+          .from('chapters')
+          .select('id, chapter_number, source_url')
+          .eq('manga_id', manga.id)
+          .order('chapter_number', { ascending: false })
+          .limit(10); // Limit to first 10 chapters to avoid timeout
+        
+        if (chapters && chapters.length > 0) {
+          let downloadedChapters = 0;
+          
+          for (const chapter of chapters) {
+            try {
+              setProgressMessage(`جاري تحميل صفحات الفصل ${chapter.chapter_number}...`);
+              
+              await supabase.functions.invoke('scrape-lekmanga', {
+                body: {
+                  url: chapter.source_url,
+                  jobType: 'pages',
+                  source: selectedSource,
+                  chapterId: chapter.id,
+                },
+              });
+              
+              downloadedChapters++;
+              setProgress(70 + (downloadedChapters / chapters.length) * 25);
+            } catch (pageError) {
+              console.error(`Failed to download pages for chapter ${chapter.chapter_number}:`, pageError);
+              // Continue with next chapter
+            }
+          }
+          
+          toast({
+            title: "✅ نجح السحب",
+            description: `تم سحب "${manga.title}" مع ${savedCount} فصل. تم تحميل صفحات ${downloadedChapters} من الفصول الأولى.`,
+          });
+        }
+      } else {
+        toast({
+          title: "✅ نجح السحب",
+          description: `تم سحب "${manga.title}" مع ${savedCount}${partial ? `/${totalCount}` : ''} فصل${partial ? ' (بعض الفصول لم يتم سحبها بسبب الوقت)' : ''}. الصفحات سيتم سحبها عند فتح الفصل.`,
+        });
+      }
+
       setProgress(100);
       setProgressMessage("اكتمل السحب بنجاح!");
-
-      toast({
-        title: "✅ نجح السحب",
-        description: `تم سحب "${manga.title}" مع ${savedCount}${partial ? `/${totalCount}` : ''} فصل${partial ? ' (بعض الفصول لم يتم سحبها بسبب الوقت)' : ''}. الصفحات سيتم سحبها عند فتح الفصل.`,
-      });
-
+      
       setUrl("");
       onSuccess();
     } catch (error: any) {
@@ -254,6 +299,22 @@ export const ScrapeFromURL = ({ onSuccess }: { onSuccess: () => void }) => {
                 dir="ltr"
               />
             </div>
+
+            <div className="flex items-center space-x-2 space-x-reverse">
+              <input
+                type="checkbox"
+                id="auto-download-pages"
+                checked={autoDownloadPages}
+                onChange={(e) => setAutoDownloadPages(e.target.checked)}
+                className="rounded border-border"
+              />
+              <Label htmlFor="auto-download-pages" className="text-sm cursor-pointer">
+                تحميل صفحات الفصول تلقائياً (أول 10 فصول)
+              </Label>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              إذا فعلت هذا الخيار، سيتم تحميل صفحات أول 10 فصول مباشرة (يأخذ وقت أطول)
+            </p>
 
             {loading && (
               <div className="space-y-2">
