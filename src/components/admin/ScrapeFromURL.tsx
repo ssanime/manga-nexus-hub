@@ -105,13 +105,12 @@ export const ScrapeFromURL = ({ onSuccess }: { onSuccess: () => void }) => {
         setProgress(70);
         setProgressMessage("جاري تحميل صفحات الفصول...");
         
-        // Get the saved chapters
+        // Get ALL saved chapters
         const { data: chapters } = await supabase
           .from('chapters')
           .select('id, chapter_number, source_url')
           .eq('manga_id', manga.id)
-          .order('chapter_number', { ascending: false })
-          .limit(10); // Limit to first 10 chapters to avoid timeout
+          .order('chapter_number', { ascending: false });
         
         if (chapters && chapters.length > 0) {
           let downloadedChapters = 0;
@@ -139,7 +138,7 @@ export const ScrapeFromURL = ({ onSuccess }: { onSuccess: () => void }) => {
           
           toast({
             title: "✅ نجح السحب",
-            description: `تم سحب "${manga.title}" مع ${savedCount} فصل. تم تحميل صفحات ${downloadedChapters} من الفصول الأولى.`,
+            description: `تم سحب "${manga.title}" مع ${savedCount} فصل. تم تحميل صفحات ${downloadedChapters} فصل في الخلفية.`,
           });
         }
       } else {
@@ -309,11 +308,11 @@ export const ScrapeFromURL = ({ onSuccess }: { onSuccess: () => void }) => {
                 className="rounded border-border"
               />
               <Label htmlFor="auto-download-pages" className="text-sm cursor-pointer">
-                تحميل صفحات الفصول تلقائياً (أول 10 فصول)
+                تحميل صفحات جميع الفصول تلقائياً في الخلفية
               </Label>
             </div>
             <p className="text-xs text-muted-foreground">
-              إذا فعلت هذا الخيار، سيتم تحميل صفحات أول 10 فصول مباشرة (يأخذ وقت أطول)
+              إذا فعلت هذا الخيار، سيتم تحميل صفحات جميع الفصول تلقائياً في الخلفية (قد يأخذ وقت طويل للمانجا ذات الفصول الكثيرة)
             </p>
 
             {loading && (
