@@ -203,21 +203,25 @@ async function loadScraperConfig(supabase: any, sourceName: string) {
     "olympustaff": {
       baseUrl: "https://olympustaff.com",
       selectors: {
-        title: [".author-info-title h1", "h1", ".manga-title", ".entry-title"],
-        cover: [".whitebox img.shadow-sm", ".text-right img", "img[alt='Manga Image']", ".cover img"],
-        description: [".review-author-info + div", ".description", ".summary", ".manga-description"],
-        status: [".full-list-info small a[href*='status']", ".status", ".manga-status"],
-        genres: [".review-author-info a.subtitle", "a[href*='genre']", ".genre a"],
-        author: [".full-list-info small a[href*='author']", ".author"],
-        artist: [".full-list-info:contains('الرسام') small a", ".full-list-info:contains('الرسام') small", ".artist"],
-        rating: [".rating-avg-line", ".rating"],
-        chapters: [".last-chapter .box", ".chapters li", ".chapter-list li"],
-        chapterTitle: [".info h3 + ul a", ".info a", "a"],
-        chapterUrl: [".info h3 a", ".imgu a", "a"],
-        chapterDate: [".date", ".chapter-date"],
-        pageImages: [".images img", ".chapter-content img", "img.chapter-img", ".reader img"],
+        // معلومات المانجا الأساسية
+        title: [".author-info-title h1", ".series-title", "h1.text-white", "h1", ".manga-title"],
+        cover: [".whitebox img.shadow-sm", ".series-thumb img", ".text-right img", "img[alt*='Manga']", ".cover img", "img.img-fluid"],
+        description: [".review-author-info", ".series-synops", ".description p", ".manga-description", ".summary p"],
+        status: [".full-list-info small a[href*='status']", ".status-badge", ".status", ".manga-status"],
+        genres: [".review-author-info a.subtitle", ".genres a", "a[href*='genre']", ".genre a", ".tag a"],
+        author: [".full-list-info small a[href*='author']", ".author a", ".author"],
+        artist: [".full-list-info small a[href*='artist']", ".artist a", ".artist"],
+        rating: [".rating-avg-line", ".rating", ".score"],
+        // قائمة الفصول - selectors محدثة بناءً على HTML الفعلي
+        chapters: ["#chaptersContainer .chapter-card", ".enhanced-chapters-grid .chapter-card", ".chapters-list .chapter-card", ".chapter-card", ".last-chapter .box"],
+        chapterTitle: [".chapter-title", ".chapter-number", ".chapter-info .chapter-number", "a"],
+        chapterUrl: ["a.chapter-link", ".chapter-link", "a"],
+        chapterDate: [".chapter-date span", ".chapter-date", ".date"],
+        // صور الفصل
+        pageImages: [".chapter-images img", ".images img", ".reader-content img", "img.chapter-img", ".page-image", "#readerContent img"],
         year: [".year", ".release-year"],
-        catalogMangaCard: [".entry-box", ".swiper-slide .entry-box", ".box", ".manga-card"],
+        // الكتالوج
+        catalogMangaCard: [".entry-box", ".swiper-slide .entry-box", ".box", ".manga-card", ".series-card"],
         catalogMangaLink: [".entry-image a", ".entry-title a", "a[href*='series']", "a"],
         catalogMangaCover: [".entry-image img", ".best-img", ".imgu img", "img"]
       }
@@ -225,23 +229,27 @@ async function loadScraperConfig(supabase: any, sourceName: string) {
     "3asq": {
       baseUrl: "https://3asq.org",
       selectors: {
-        title: [".post-title h1", "h1", ".entry-title"],
-        cover: [".summary_image img", "img.img-responsive", ".tab-summary img", "img.wp-post-image"],
-        description: [".manga-excerpt p", ".summary__content p", ".description-summary p"],
-        status: [".post-content_item:contains('الحالة') .summary-content", ".summary-content"],
-        genres: [".genres-content a", "a[href*='manga-genre']"],
-        author: [".author-content a", "a[href*='manga-author']"],
+        // معلومات المانجا
+        title: [".post-title h1", "h1.entry-title", ".manga-title", "h1"],
+        cover: [".summary_image img", ".thumb img", "img.wp-post-image", ".tab-summary img", ".manga-cover img"],
+        description: [".manga-excerpt p", ".summary__content p", ".description-summary p", ".entry-content p"],
+        status: [".post-status .summary-content", ".post-content_item .summary-content", ".status"],
+        genres: [".genres-content a", ".mgen a", "a[href*='manga-genre']", ".genre a"],
+        author: [".author-content a", ".manga-author a", "a[href*='manga-author']"],
         artist: [".artist-content a", "a[href*='manga-artist']"],
-        rating: [".score", ".total_votes", "[itemprop='ratingValue']"],
-        chapters: ["li.wp-manga-chapter", ".chapter-item", ".listing-chapters_wrap li"],
-        chapterTitle: ["a", ".chapter-link"],
+        rating: [".score", ".rating .num", "[itemprop='ratingValue']"],
+        // قائمة الفصول
+        chapters: ["ul.main li.wp-manga-chapter", "li.wp-manga-chapter", ".listing-chapters_wrap li", ".chapters-list li", ".chapter-item"],
+        chapterTitle: ["a", ".chapter-name"],
         chapterUrl: ["a"],
-        chapterDate: [".chapter-release-date i", ".chapter-release-date", ".release-date"],
-        pageImages: [".reading-content img", ".page-break img", "#readerarea img"],
+        chapterDate: [".chapter-release-date i", ".chapter-release-date", "span.chapter-release-date", ".release-date"],
+        // صور الفصل
+        pageImages: [".reading-content img", ".page-break img", "#readerarea img", ".chapter-content img"],
         year: ["a[href*='manga-release']", ".release-year"],
-        catalogMangaCard: [".page-item-detail", ".col-12.col-md-4", ".manga-item"],
-        catalogMangaLink: [".item-thumb a", ".post-title a", "a[href*='/manga/']"],
-        catalogMangaCover: [".item-thumb img", "img.img-responsive", "img"]
+        // الكتالوج
+        catalogMangaCard: [".page-item-detail", ".c-tabs-item__content", ".manga-item", "article.post"],
+        catalogMangaLink: [".item-thumb a", ".post-title a", "a[href*='/manga/']", "a"],
+        catalogMangaCover: [".item-thumb img", "img.wp-post-image", "img"]
       }
     }
   };
@@ -691,7 +699,7 @@ async function scrapeChapters(mangaUrl: string, source: string, supabase: any) {
           let chapterUrl = '';
           let title = '';
           
-          // Try to find link
+          // Try to find link - support multiple patterns
           for (const urlSelector of config.selectors.chapterUrl) {
             const linkEl = chapterEl.querySelector(urlSelector);
             if (linkEl) {
@@ -701,19 +709,76 @@ async function scrapeChapters(mangaUrl: string, source: string, supabase: any) {
             }
           }
           
-          if (!chapterUrl) continue;
+          // If no link found with selector, try the element itself if it's a link
+          if (!chapterUrl && chapterEl.tagName === 'A') {
+            chapterUrl = chapterEl.getAttribute('href') || '';
+            title = chapterEl.textContent?.trim() || '';
+          }
           
-          // Extract chapter number
+          // For olympustaff: check if element has a direct link child
+          if (!chapterUrl) {
+            const directLink = chapterEl.querySelector('a');
+            if (directLink) {
+              chapterUrl = directLink.getAttribute('href') || '';
+            }
+          }
+          
+          if (!chapterUrl) {
+            console.log(`[Chapters] ⚠️ No URL found for chapter ${i + 1}`);
+            continue;
+          }
+          
+          // Extract chapter number - multiple methods
           let chapterNumber = 0;
-          const numMatch = title.match(/(\d+\.?\d*)/);
-          if (numMatch) {
-            chapterNumber = parseFloat(numMatch[1]);
-          } else {
-            const urlMatch = chapterUrl.match(/(\d+\.?\d*)/);
-            chapterNumber = urlMatch ? parseFloat(urlMatch[1]) : chapterElements.length - i;
+          
+          // Method 1: data-number attribute (olympustaff uses this)
+          const dataNumber = chapterEl.getAttribute('data-number');
+          if (dataNumber) {
+            chapterNumber = parseFloat(dataNumber);
+            console.log(`[Chapters] Got chapter number from data-number: ${chapterNumber}`);
+          }
+          
+          // Method 2: Try title selectors
+          if (chapterNumber === 0) {
+            for (const titleSelector of config.selectors.chapterTitle) {
+              const titleEl = chapterEl.querySelector(titleSelector);
+              if (titleEl) {
+                const titleText = titleEl.textContent?.trim() || '';
+                // Extract number from Arabic text like "الفصل 22"
+                const numMatch = titleText.match(/(\d+\.?\d*)/);
+                if (numMatch) {
+                  chapterNumber = parseFloat(numMatch[1]);
+                  if (!title) title = titleText;
+                  break;
+                }
+              }
+            }
+          }
+          
+          // Method 3: Extract from URL
+          if (chapterNumber === 0) {
+            // Match patterns like /series/manga-name/22 or /chapter/22 or chapter-22
+            const urlPatterns = [
+              /\/(\d+\.?\d*)\/?$/,
+              /chapter[_-]?(\d+\.?\d*)/i,
+              /ch[_-]?(\d+\.?\d*)/i,
+              /(\d+\.?\d*)$/
+            ];
+            for (const pattern of urlPatterns) {
+              const urlMatch = chapterUrl.match(pattern);
+              if (urlMatch) {
+                chapterNumber = parseFloat(urlMatch[1]);
+                break;
+              }
+            }
+          }
+          
+          // Method 4: Fallback to position
+          if (chapterNumber === 0) {
+            chapterNumber = chapterElements.length - i;
           }
 
-          // Find date
+          // Find date - try multiple selectors
           let dateText = '';
           for (const dateSelector of config.selectors.chapterDate) {
             const dateEl = chapterEl.querySelector(dateSelector);
@@ -722,16 +787,51 @@ async function scrapeChapters(mangaUrl: string, source: string, supabase: any) {
               if (dateText) break;
             }
           }
+          
+          // Try data-date attribute (olympustaff uses timestamp)
+          if (!dateText) {
+            const dataDate = chapterEl.getAttribute('data-date');
+            if (dataDate) {
+              // Convert timestamp to date
+              const timestamp = parseInt(dataDate);
+              if (timestamp > 0) {
+                const date = new Date(timestamp * 1000);
+                dateText = date.toISOString().split('T')[0];
+              }
+            }
+          }
 
           // Convert date to ISO format
           const releaseDate = parseArabicDate(dateText);
           
+          // Get title from .chapter-title or .chapter-number
+          if (!title || title.length < 3) {
+            const chapterTitleEl = chapterEl.querySelector('.chapter-title, .chapter-number');
+            if (chapterTitleEl) {
+              title = chapterTitleEl.textContent?.trim() || '';
+            }
+          }
+          
+          // Normalize URL
+          let fullUrl = chapterUrl;
+          if (!fullUrl.startsWith('http')) {
+            if (fullUrl.startsWith('//')) {
+              fullUrl = 'https:' + fullUrl;
+            } else if (fullUrl.startsWith('/')) {
+              fullUrl = config.baseUrl + fullUrl;
+            } else {
+              fullUrl = config.baseUrl + '/' + fullUrl;
+            }
+          }
+          
           chapters.push({
             chapter_number: chapterNumber,
-            title: title || `Chapter ${chapterNumber}`,
-            source_url: chapterUrl.startsWith('http') ? chapterUrl : config.baseUrl + chapterUrl,
+            title: title || `الفصل ${chapterNumber}`,
+            source_url: fullUrl,
             release_date: releaseDate,
           });
+          
+          console.log(`[Chapters] ✓ Chapter ${chapterNumber}: ${title?.substring(0, 30) || 'N/A'}`);
         } catch (e: any) {
           console.error(`[Chapters] Error processing chapter ${i + 1}:`, e?.message || e);
         }
