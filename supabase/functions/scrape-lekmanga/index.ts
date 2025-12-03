@@ -117,10 +117,10 @@ async function loadScraperConfig(supabase: any, sourceName: string) {
   console.log(`[Config] ⚠️ Using fallback config for ${sourceName}`);
   const FALLBACK_CONFIGS: Record<string, any> = {
     "onma": {
-      baseUrl: "https://www.onma.top",
+      baseUrl: "https://onma.me",
       selectors: {
-        title: [".panel-heading", "h1", ".title", ".manga-title"],
-        cover: ["img.img-responsive", ".thumbnail img", ".manga-cover img", "img[alt]"],
+        title: [".manga-name .label", ".panel-heading", "h1", ".title", ".manga-title"],
+        cover: [".boxed img.img-responsive", ".thumbnail img", ".manga-cover img", "img[alt]"],
         description: [".well p", ".description", ".manga-description", ".summary"],
         status: [".label", ".status", ".manga-status"],
         genres: ["a[href*='genre']", ".genre a", ".tag a", ".category a"],
@@ -132,31 +132,29 @@ async function loadScraperConfig(supabase: any, sourceName: string) {
         chapterDate: [".date-chapter-title-rtl", ".date", ".chapter-date", ".release-date"],
         pageImages: [".img-responsive", ".chapter-img", "img[alt*='page']", ".page-image", "img.lazy"],
         year: [".text", ".year", ".release-year"],
-        catalogMangaCard: [".photo", ".manga-card", ".item", ".manga-item"],
-        catalogMangaLink: [".manga-name a", "a", ".title a", ".manga-link"],
+        catalogMangaCard: [".photo", ".span3", ".manga-card", ".item", ".manga-item"],
+        catalogMangaLink: [".manga-name a", ".label", "a", ".title a", ".manga-link"],
         catalogMangaCover: [".thumbnail img", "img", ".cover img", ".manga-cover"]
       }
     },
     "dilar": {
       baseUrl: "https://dilar.tube",
       selectors: {
-        title: [".entry-title", "h1.post-title", "h1"],
-        cover: [".thumb img", ".entry-thumb img", "img[itemprop='image']", ".post-thumb img"],
-        description: [".entry-content p", ".summary p", ".description", "[itemprop='description']"],
-        status: [".status", ".imptdt:contains('الحالة') i", ".manga-status"],
-        genres: [".mgen a", ".genre-info a", "a[rel='category tag']"],
-        author: [".imptdt:contains('المؤلف') i", ".author", ".fmed:contains('Author') b"],
-        artist: [".imptdt:contains('الرسام') i", ".artist"],
-        rating: ["[itemprop='ratingValue']", ".rating-prc", ".num"],
-        chapters: [".eplister ul li", ".chapter-list li", "li[class*='chapter']"],
-        chapterTitle: [".chapternum", "a", ".chapter-link"],
+        title: [".manga-title", "h1", ".title", ".entry-title"],
+        cover: [".manga-cover img", ".thumb img", "img.cover", "img"],
+        description: [".manga-description", ".summary", ".description", "p"],
+        status: [".status", ".manga-status"],
+        genres: [".genre a", ".tag a", "a[href*='genre']"],
+        author: [".author", ".manga-author"],
+        artist: [".artist", ".manga-artist"],
+        chapters: [".chapter-list li", ".chapters li", "li[class*='chapter']"],
+        chapterTitle: [".chapter-num", "a", ".chapter-link"],
         chapterUrl: ["a"],
-        chapterDate: [".chapterdate", ".date"],
-        pageImages: ["#readerarea img", ".rdminimal img", ".reading-content img"],
-        year: [".fmed:contains('Released') b", ".year"],
-        catalogMangaCard: [".bs", ".bsx", ".listupd article"],
-        catalogMangaLink: ["a"],
-        catalogMangaCover: [".limit img", "img"]
+        chapterDate: [".chapter-date", ".date"],
+        pageImages: [".reader-content img", ".chapter-content img", "img.page", "img"],
+        catalogMangaCard: [".manga-card", ".manga-item", ".card", "article"],
+        catalogMangaLink: ["a[href*='manga']", "a"],
+        catalogMangaCover: [".cover img", "img"]
       }
     },
     "lekmanga": {
@@ -200,6 +198,50 @@ async function loadScraperConfig(supabase: any, sourceName: string) {
         catalogMangaCard: [".bs", ".bsx", ".listupd .bs", ".listupd article", ".page-item-detail"],
         catalogMangaLink: [".bsx a", "a"],
         catalogMangaCover: [".limit img", "img"]
+      }
+    },
+    "olympustaff": {
+      baseUrl: "https://olympustaff.com",
+      selectors: {
+        title: [".author-info-title h1", "h1", ".manga-title", ".entry-title"],
+        cover: [".whitebox img.shadow-sm", ".text-right img", "img[alt='Manga Image']", ".cover img"],
+        description: [".review-author-info + div", ".description", ".summary", ".manga-description"],
+        status: [".full-list-info small a[href*='status']", ".status", ".manga-status"],
+        genres: [".review-author-info a.subtitle", "a[href*='genre']", ".genre a"],
+        author: [".full-list-info small a[href*='author']", ".author"],
+        artist: [".full-list-info:contains('الرسام') small a", ".full-list-info:contains('الرسام') small", ".artist"],
+        rating: [".rating-avg-line", ".rating"],
+        chapters: [".last-chapter .box", ".chapters li", ".chapter-list li"],
+        chapterTitle: [".info h3 + ul a", ".info a", "a"],
+        chapterUrl: [".info h3 a", ".imgu a", "a"],
+        chapterDate: [".date", ".chapter-date"],
+        pageImages: [".images img", ".chapter-content img", "img.chapter-img", ".reader img"],
+        year: [".year", ".release-year"],
+        catalogMangaCard: [".entry-box", ".swiper-slide .entry-box", ".box", ".manga-card"],
+        catalogMangaLink: [".entry-image a", ".entry-title a", "a[href*='series']", "a"],
+        catalogMangaCover: [".entry-image img", ".best-img", ".imgu img", "img"]
+      }
+    },
+    "3asq": {
+      baseUrl: "https://3asq.org",
+      selectors: {
+        title: [".post-title h1", "h1", ".entry-title"],
+        cover: [".summary_image img", "img.img-responsive", ".tab-summary img", "img.wp-post-image"],
+        description: [".manga-excerpt p", ".summary__content p", ".description-summary p"],
+        status: [".post-content_item:contains('الحالة') .summary-content", ".summary-content"],
+        genres: [".genres-content a", "a[href*='manga-genre']"],
+        author: [".author-content a", "a[href*='manga-author']"],
+        artist: [".artist-content a", "a[href*='manga-artist']"],
+        rating: [".score", ".total_votes", "[itemprop='ratingValue']"],
+        chapters: ["li.wp-manga-chapter", ".chapter-item", ".listing-chapters_wrap li"],
+        chapterTitle: ["a", ".chapter-link"],
+        chapterUrl: ["a"],
+        chapterDate: [".chapter-release-date i", ".chapter-release-date", ".release-date"],
+        pageImages: [".reading-content img", ".page-break img", "#readerarea img"],
+        year: ["a[href*='manga-release']", ".release-year"],
+        catalogMangaCard: [".page-item-detail", ".col-12.col-md-4", ".manga-item"],
+        catalogMangaLink: [".item-thumb a", ".post-title a", "a[href*='/manga/']"],
+        catalogMangaCover: [".item-thumb img", "img.img-responsive", "img"]
       }
     }
   };
