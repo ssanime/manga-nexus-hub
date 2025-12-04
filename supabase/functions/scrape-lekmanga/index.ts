@@ -212,13 +212,13 @@ async function loadScraperConfig(supabase: any, sourceName: string) {
         author: [".full-list-info small a[href*='author']", ".author a", ".author"],
         artist: [".full-list-info small a[href*='artist']", ".artist a", ".artist"],
         rating: [".rating-avg-line", ".rating", ".score"],
-        // قائمة الفصول - selectors محدثة بناءً على HTML الفعلي
-        chapters: ["#chaptersContainer .chapter-card", ".enhanced-chapters-grid .chapter-card", ".chapters-list .chapter-card", ".chapter-card", ".last-chapter .box"],
+        // قائمة الفصول
+        chapters: ["#chaptersContainer .chapter-card", ".enhanced-chapters-grid .chapter-card", ".chapter-card", ".last-chapter .box"],
         chapterTitle: [".chapter-title", ".chapter-number", ".chapter-info .chapter-number", "a"],
         chapterUrl: ["a.chapter-link", ".chapter-link", "a"],
         chapterDate: [".chapter-date span", ".chapter-date", ".date"],
-        // صور الفصل
-        pageImages: [".chapter-images img", ".images img", ".reader-content img", "img.chapter-img", ".page-image", "#readerContent img"],
+        // صور الفصل - محدث للعثور على الصور في page-break
+        pageImages: [".page-break img", ".page-break.no-gaps img", "img.manga-chapter-img", "#image-0", ".reader-content img", ".chapter-images img"],
         year: [".year", ".release-year"],
         // الكتالوج
         catalogMangaCard: [".entry-box", ".swiper-slide .entry-box", ".box", ".manga-card", ".series-card"],
@@ -238,13 +238,13 @@ async function loadScraperConfig(supabase: any, sourceName: string) {
         author: [".author-content a", ".manga-author a", "a[href*='manga-author']"],
         artist: [".artist-content a", "a[href*='manga-artist']"],
         rating: [".score", ".rating .num", "[itemprop='ratingValue']"],
-        // قائمة الفصول
-        chapters: ["ul.main li.wp-manga-chapter", "li.wp-manga-chapter", ".listing-chapters_wrap li", ".chapters-list li", ".chapter-item"],
+        // قائمة الفصول - محدث للعثور على الفصول
+        chapters: ["li.wp-manga-chapter", "ul.main li.wp-manga-chapter", ".listing-chapters_wrap li", ".version-chap li"],
         chapterTitle: ["a", ".chapter-name"],
         chapterUrl: ["a"],
-        chapterDate: [".chapter-release-date i", ".chapter-release-date", "span.chapter-release-date", ".release-date"],
-        // صور الفصل
-        pageImages: [".reading-content img", ".page-break img", "#readerarea img", ".chapter-content img"],
+        chapterDate: [".chapter-release-date i", ".chapter-release-date .timediff i", "span.chapter-release-date", ".release-date"],
+        // صور الفصل - محدث للعثور على صور الفصل
+        pageImages: ["img.wp-manga-chapter-img", ".reading-content img", ".page-break img", "#readerarea img"],
         year: ["a[href*='manga-release']", ".release-year"],
         // الكتالوج
         catalogMangaCard: [".page-item-detail", ".c-tabs-item__content", ".manga-item", "article.post"],
@@ -1207,24 +1207,28 @@ serve(async (req) => {
         if (mangaError) throw mangaError;
 
         let chaptersData = [];
+        const savedChapters: any[] = [];
+        
         if (jobType === 'chapters') {
           chaptersData = await scrapeChapters(url, source, supabase);
           
           let savedCount = 0;
-          // Save chapter metadata only (NOT pages - to avoid timeout)
+          // Save chapter metadata
           for (const chapter of chaptersData) {
-            // Check timeout before processing each chapter
             if (isNearTimeout()) {
               console.log(`[Chapters] ⚠️ Timeout approaching, saved ${savedCount}/${chaptersData.length} chapters`);
               break;
             }
             
-            const { error: chapterError } = await supabase
+            const { data: savedChapter, error: chapterError } = await supabase
               .from('chapters')
-              .upsert({ ...chapter, manga_id: manga.id }, { onConflict: 'manga_id,chapter_number' });
+              .upsert({ ...chapter, manga_id: manga.id }, { onConflict: 'manga_id,chapter_number' })
+              .select()
+              .single();
             
-            if (!chapterError) {
+            if (!chapterError && savedChapter) {
               savedCount++;
+              savedChapters.push(savedChapter);
             } else {
               console.error(`[Chapters] Error saving chapter ${chapter.chapter_number}:`, chapterError);
             }
@@ -1236,7 +1240,57 @@ serve(async (req) => {
             .update({ chapter_count: savedCount })
             .eq('id', manga.id);
           
-          console.log(`[Chapters] ✓ Saved ${savedCount} chapters (metadata only)`);
+          console.log(`[Chapters] ✓ Saved ${savedCount} chapters`);
+          
+          // تحميل صفحات الفصول تلقائياً في الخلفية
+          console.log(`[AutoPages] 🚀 Starting automatic page download for ${savedChapters.length} chapters...`);
+          
+          // Download pages for all chapters in parallel (batches of 3)
+          const BATCH_SIZE = 3;
+          let pagesDownloaded = 0;
+          
+          for (let i = 0; i < savedChapters.length && !isNearTimeout(); i += BATCH_SIZE) {
+            const batch = savedChapters.slice(i, i + BATCH_SIZE);
+            
+            const batchPromises = batch.map(async (chapter: any) => {
+              try {
+                // Check if chapter already has pages
+                const { count } = await supabase
+                  .from('chapter_pages')
+                  .select('*', { count: 'exact', head: true })
+                  .eq('chapter_id', chapter.id);
+                
+                if (count && count > 0) {
+                  console.log(`[AutoPages] ⏭️ Chapter ${chapter.chapter_number} already has ${count} pages, skipping`);
+                  return 0;
+                }
+                
+                console.log(`[AutoPages] 📥 Downloading pages for chapter ${chapter.chapter_number}...`);
+                const pages = await scrapeChapterPages(chapter.source_url, source, supabase, chapter.id);
+                
+                // Save pages
+                for (const page of pages) {
+                  await supabase
+                    .from('chapter_pages')
+                    .upsert({ ...page, chapter_id: chapter.id }, { onConflict: 'chapter_id,page_number' });
+                }
+                
+                console.log(`[AutoPages] ✓ Chapter ${chapter.chapter_number}: ${pages.length} pages`);
+                return pages.length;
+              } catch (err: any) {
+                console.error(`[AutoPages] ✗ Chapter ${chapter.chapter_number} failed:`, err?.message?.substring(0, 100));
+                return 0;
+              }
+            });
+            
+            const results = await Promise.all(batchPromises);
+            pagesDownloaded += results.reduce((a, b) => a + b, 0);
+            
+            // Small delay between batches
+            await delay(1000);
+          }
+          
+          console.log(`[AutoPages] ✅ Completed: ${pagesDownloaded} total pages downloaded`);
         }
 
         await supabase
@@ -1252,7 +1306,8 @@ serve(async (req) => {
           JSON.stringify({ 
             success: true, 
             manga, 
-            chaptersCount: chaptersData.length 
+            chaptersCount: chaptersData.length,
+            pagesDownloaded: true
           }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
