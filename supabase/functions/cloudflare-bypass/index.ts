@@ -17,7 +17,7 @@ serve(async (req) => {
   }
 
   try {
-    const { url, waitForSelector, timeout = 30000 }: BypassRequest = await req.json();
+    const { url, waitForSelector, timeout = 45000 }: BypassRequest = await req.json();
 
     if (!url) {
       return new Response(
@@ -26,14 +26,14 @@ serve(async (req) => {
       );
     }
 
-    console.log(`[Cloudflare Bypass] Starting advanced bypass for: ${url}`);
+    console.log(`[Cloudflare Bypass] Starting bypass for: ${url}`);
 
-    // Get Firecrawl API key
     const firecrawlApiKey = Deno.env.get('FIRECRAWL_API_KEY');
 
-    // Strategy 1: Try Firecrawl first (best for Cloudflare)
+    // Strategy 1: Firecrawl with optimized settings
     if (firecrawlApiKey) {
-      console.log(`[Bypass] Attempt 1: Using Firecrawl API (advanced browser emulation)`);
+      console.log(`[Bypass] Using Firecrawl API with extended timeout`);
+      
       try {
         const firecrawlResponse = await fetch('https://api.firecrawl.dev/v1/scrape', {
           method: 'POST',
@@ -44,22 +44,23 @@ serve(async (req) => {
           body: JSON.stringify({
             url,
             formats: ['html'],
-            waitFor: 5000, // Always wait for page to fully load
-            timeout: Math.floor(timeout / 1000) + 10, // Add extra time
-            actions: waitForSelector ? [{ type: 'wait', selector: waitForSelector }] : undefined,
+            waitFor: 8000, // Wait 8 seconds for page to load
+            timeout: 60, // 60 seconds timeout
+            onlyMainContent: false, // Get full HTML
           }),
         });
 
         const responseData = await firecrawlResponse.json();
         
-        console.log(`[Bypass] Firecrawl Response Status: ${firecrawlResponse.status}`);
+        console.log(`[Bypass] Firecrawl Status: ${firecrawlResponse.status}`);
         
         if (firecrawlResponse.ok && responseData.success && responseData.data?.html) {
           const htmlLength = responseData.data.html.length;
-          console.log(`[Bypass] ✓ Firecrawl success! Retrieved ${htmlLength} bytes`);
+          console.log(`[Bypass] ✓ Firecrawl returned ${htmlLength} bytes`);
           
-          // Validate that we got actual content (manga pages should be > 10KB)
-          if (htmlLength > 10000) {
+          // Check if we got real content (manga pages should be > 20KB)
+          if (htmlLength > 20000) {
+            console.log(`[Bypass] ✓ Valid manga page content!`);
             return new Response(
               JSON.stringify({
                 success: true,
@@ -70,142 +71,111 @@ serve(async (req) => {
               { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
             );
           } else {
-            console.log(`[Bypass] ⚠️ Firecrawl returned small page (${htmlLength} bytes), trying enhanced fetch`);
+            console.log(`[Bypass] ⚠️ Page too small (${htmlLength} bytes), might be incomplete`);
           }
         } else {
           const errorMsg = responseData.error || responseData.message || 'Unknown error';
-          console.error(`[Bypass] ❌ Firecrawl failed (${firecrawlResponse.status}): ${errorMsg}`);
+          console.error(`[Bypass] Firecrawl error: ${errorMsg}`);
         }
-      } catch (firecrawlError) {
-        console.error('[Bypass] Firecrawl exception:', firecrawlError);
+      } catch (e) {
+        console.error('[Bypass] Firecrawl exception:', e);
       }
-    } else {
-      console.log(`[Bypass] ⚠️ No Firecrawl API key, skipping to enhanced fetch`);
     }
 
-    // Strategy 2: Enhanced fetch with multiple attempts
-    console.log(`[Bypass] Attempt 2: Enhanced fetch with stealth mode`);
+    // Strategy 2: Direct fetch with browser-like headers
+    console.log(`[Bypass] Trying direct fetch with stealth headers`);
     
     const userAgents = [
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Safari/605.1.15',
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:133.0) Gecko/20100101 Firefox/133.0',
     ];
-    const userAgent = userAgents[Math.floor(Math.random() * userAgents.length)];
     
-    const baseHeaders: HeadersInit = {
-      'User-Agent': userAgent,
-      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-      'Accept-Language': 'ar-SA,ar;q=0.9,en-US;q=0.8,en;q=0.7',
-      'Accept-Encoding': 'gzip, deflate, br',
-      'Connection': 'keep-alive',
-      'Upgrade-Insecure-Requests': '1',
-      'Sec-Fetch-Dest': 'document',
-      'Sec-Fetch-Mode': 'navigate',
-      'Sec-Fetch-Site': 'none',
-      'Sec-Fetch-User': '?1',
-      'Cache-Control': 'max-age=0',
-      'sec-ch-ua': '"Chromium";v="131", "Not_A Brand";v="24"',
-      'sec-ch-ua-mobile': '?0',
-      'sec-ch-ua-platform': '"Windows"',
-    };
-
-    // Try multiple times with different strategies
     for (let attempt = 1; attempt <= 3; attempt++) {
-      console.log(`[Bypass] Enhanced fetch attempt ${attempt}/3`);
+      const userAgent = userAgents[(attempt - 1) % userAgents.length];
       
-      const headers = {
-        ...baseHeaders,
-        'Referer': attempt === 1 ? '' : new URL(url).origin + '/',
-      };
+      console.log(`[Bypass] Attempt ${attempt}/3 with UA: ${userAgent.substring(0, 50)}...`);
       
-      // Add delay between attempts
       if (attempt > 1) {
-        const delay = 1000 + Math.floor(Math.random() * 2000);
-        console.log(`[Bypass] Waiting ${delay}ms before retry...`);
-        await new Promise(resolve => setTimeout(resolve, delay));
+        await new Promise(r => setTimeout(r, 2000 + Math.random() * 2000));
       }
-
+      
       try {
         const response = await fetch(url, {
-          headers,
+          headers: {
+            'User-Agent': userAgent,
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+            'Accept-Language': 'ar,en-US;q=0.9,en;q=0.8',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1',
+            'Sec-Fetch-Dest': 'document',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Site': 'none',
+            'Sec-Fetch-User': '?1',
+            'Cache-Control': 'max-age=0',
+            'sec-ch-ua': '"Chromium";v="131", "Not_A Brand";v="24"',
+            'sec-ch-ua-mobile': '?0',
+            'sec-ch-ua-platform': '"Windows"',
+          },
           redirect: 'follow',
         });
 
         const html = await response.text();
         const htmlLength = html.length;
         
-        console.log(`[Bypass] Attempt ${attempt}: Got ${htmlLength} bytes, status ${response.status}`);
+        console.log(`[Bypass] Got ${htmlLength} bytes, status ${response.status}`);
         
-        // Log first part of HTML for debugging
-        console.log(`[Bypass] HTML preview: ${html.substring(0, 300).replace(/\n/g, ' ')}`);
-
-        // Check if this is a Cloudflare challenge
-        const isCloudflareChallenge = 
-          html.includes('Checking your browser') || 
+        // Check for Cloudflare challenge
+        const isChallenge = 
+          html.includes('Checking your browser') ||
           html.includes('Just a moment') ||
           html.includes('cf-browser-verification') ||
           html.includes('challenge-platform') ||
-          html.includes('cf-spinner') ||
-          html.includes('__cf_chl_tk') ||
-          (response.status === 403 && html.includes('cloudflare')) ||
-          (response.status === 503 && html.includes('ray ID'));
-
-        if (isCloudflareChallenge) {
-          console.log(`[Bypass] ⚠️ Cloudflare challenge detected on attempt ${attempt}`);
-          continue; // Try again
+          (response.status === 403 && html.includes('cloudflare'));
+        
+        if (isChallenge) {
+          console.log(`[Bypass] Cloudflare challenge detected, retrying...`);
+          continue;
         }
-
-        // Check if we got actual manga content
+        
+        // Check for valid manga content
         const hasMangaContent = 
-          html.includes('manga') || 
-          html.includes('chapter') || 
           html.includes('wp-manga') ||
-          html.includes('summary_image') ||
-          html.includes('entry-title') ||
+          html.includes('manga-chapter') ||
           html.includes('post-title') ||
-          htmlLength > 15000; // Good pages are usually > 15KB
-
-        if (hasMangaContent && htmlLength > 5000) {
-          console.log(`[Bypass] ✓ Got valid manga content! ${htmlLength} bytes`);
+          html.includes('summary_image') ||
+          html.includes('chapter') ||
+          htmlLength > 15000;
+        
+        if (hasMangaContent) {
+          console.log(`[Bypass] ✓ Valid content detected!`);
           return new Response(
             JSON.stringify({
               success: true,
               html,
               status: response.status,
-              method: 'enhanced_fetch',
+              method: 'direct_fetch',
             }),
             { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
-
-        console.log(`[Bypass] ⚠️ Page doesn't seem to have manga content, trying again...`);
-      } catch (fetchError) {
-        console.error(`[Bypass] Fetch error on attempt ${attempt}:`, fetchError);
+        
+        console.log(`[Bypass] No manga content found in response`);
+      } catch (e) {
+        console.error(`[Bypass] Fetch error:`, e);
       }
     }
 
-    // If all attempts fail, return what we have
-    console.log(`[Bypass] ❌ All attempts failed, trying one last direct fetch`);
-    
-    const lastResponse = await fetch(url, {
-      headers: baseHeaders,
-      redirect: 'follow',
-    });
-    const lastHtml = await lastResponse.text();
-    
-    console.log(`[Bypass] Last resort: ${lastHtml.length} bytes`);
-
-    // Return whatever we got
+    // If all else fails, return error
+    console.log(`[Bypass] ❌ All bypass methods failed`);
     return new Response(
       JSON.stringify({
-        success: lastHtml.length > 5000,
-        html: lastHtml,
-        status: lastResponse.status,
-        method: 'last_resort',
-        warning: lastHtml.length < 10000 ? 'الصفحة قد تكون غير مكتملة' : undefined,
+        success: false,
+        error: 'فشل تجاوز الحماية. الموقع قد يكون محمي بشكل قوي.',
+        method: 'failed',
       }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
   } catch (error) {
@@ -213,7 +183,7 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({
         success: false,
-        error: error instanceof Error ? error.message : 'فشل السحب',
+        error: error instanceof Error ? error.message : 'فشل غير متوقع',
       }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
