@@ -103,42 +103,68 @@ export const ScrapeFromURL = ({ onSuccess }: { onSuccess: () => void }) => {
       // Step 3: Download pages if auto-download is enabled
       if (autoDownloadPages && savedCount > 0) {
         setProgress(70);
-        setProgressMessage("جاري تحميل صفحات الفصول...");
+        setProgressMessage("جاري تحميل صفحات الفصول بشكل متوازي...");
         
         // Get ALL saved chapters
         const { data: chapters } = await supabase
           .from('chapters')
           .select('id, chapter_number, source_url')
           .eq('manga_id', manga.id)
-          .order('chapter_number', { ascending: false });
+          .order('chapter_number', { ascending: true });
         
         if (chapters && chapters.length > 0) {
           let downloadedChapters = 0;
+          let failedChapters = 0;
+          const totalChapters = chapters.length;
           
-          for (const chapter of chapters) {
-            try {
-              setProgressMessage(`جاري تحميل صفحات الفصل ${chapter.chapter_number}...`);
-              
-              await supabase.functions.invoke('scrape-lekmanga', {
-                body: {
-                  url: chapter.source_url,
-                  jobType: 'pages',
-                  source: selectedSource,
-                  chapterId: chapter.id,
-                },
-              });
-              
-              downloadedChapters++;
-              setProgress(70 + (downloadedChapters / chapters.length) * 25);
-            } catch (pageError) {
-              console.error(`Failed to download pages for chapter ${chapter.chapter_number}:`, pageError);
-              // Continue with next chapter
+          // Download in parallel batches (5 at a time to avoid rate limiting)
+          const batchSize = 5;
+          
+          for (let i = 0; i < chapters.length; i += batchSize) {
+            const batch = chapters.slice(i, i + batchSize);
+            
+            setProgressMessage(`جاري تحميل الفصول ${i + 1} - ${Math.min(i + batchSize, totalChapters)} من ${totalChapters}...`);
+            
+            // Process batch in parallel
+            const results = await Promise.allSettled(
+              batch.map(chapter => 
+                supabase.functions.invoke('scrape-lekmanga', {
+                  body: {
+                    url: chapter.source_url,
+                    jobType: 'pages',
+                    source: selectedSource,
+                    chapterId: chapter.id,
+                  },
+                })
+              )
+            );
+            
+            // Count successes and failures
+            results.forEach((result, idx) => {
+              if (result.status === 'fulfilled' && !result.value.error) {
+                downloadedChapters++;
+              } else {
+                failedChapters++;
+                console.error(`Failed to download chapter ${batch[idx].chapter_number}:`, 
+                  result.status === 'rejected' ? result.reason : result.value.error);
+              }
+            });
+            
+            setProgress(70 + ((i + batch.length) / totalChapters) * 25);
+            
+            // Small delay between batches to avoid rate limiting
+            if (i + batchSize < chapters.length) {
+              await new Promise(r => setTimeout(r, 1000));
             }
           }
           
+          const successMsg = failedChapters > 0 
+            ? `تم سحب "${manga.title}" مع ${savedCount} فصل. نجح تحميل ${downloadedChapters}/${totalChapters} فصل (فشل ${failedChapters}).`
+            : `تم سحب "${manga.title}" مع ${savedCount} فصل. تم تحميل صفحات جميع الفصول!`;
+          
           toast({
-            title: "✅ نجح السحب",
-            description: `تم سحب "${manga.title}" مع ${savedCount} فصل. تم تحميل صفحات ${downloadedChapters} فصل في الخلفية.`,
+            title: failedChapters > 0 ? "⚠️ تم السحب جزئياً" : "✅ نجح السحب",
+            description: successMsg,
           });
         }
       } else {
