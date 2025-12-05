@@ -30,11 +30,16 @@ serve(async (req) => {
 
     const firecrawlApiKey = Deno.env.get('FIRECRAWL_API_KEY');
 
-    // Strategy 1: Firecrawl with optimized settings
+    // Strategy 1: Firecrawl with correct settings
     if (firecrawlApiKey) {
-      console.log(`[Bypass] Using Firecrawl API with extended timeout`);
+      console.log(`[Bypass] Using Firecrawl API`);
       
       try {
+        // Note: timeout is in seconds for Firecrawl, waitFor in milliseconds
+        // waitFor must be less than half of timeout (in ms)
+        const timeoutSeconds = 60;
+        const waitForMs = 5000; // 5 seconds wait for page load
+        
         const firecrawlResponse = await fetch('https://api.firecrawl.dev/v1/scrape', {
           method: 'POST',
           headers: {
@@ -44,9 +49,9 @@ serve(async (req) => {
           body: JSON.stringify({
             url,
             formats: ['html'],
-            waitFor: 8000, // Wait 8 seconds for page to load
-            timeout: 60, // 60 seconds timeout
-            onlyMainContent: false, // Get full HTML
+            waitFor: waitForMs,
+            timeout: timeoutSeconds,
+            onlyMainContent: false,
           }),
         });
 
@@ -58,21 +63,30 @@ serve(async (req) => {
           const htmlLength = responseData.data.html.length;
           console.log(`[Bypass] ✓ Firecrawl returned ${htmlLength} bytes`);
           
-          // Check if we got real content (manga pages should be > 20KB)
-          if (htmlLength > 20000) {
-            console.log(`[Bypass] ✓ Valid manga page content!`);
-            return new Response(
-              JSON.stringify({
-                success: true,
-                html: responseData.data.html,
-                status: 200,
-                method: 'firecrawl',
-              }),
-              { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-            );
-          } else {
-            console.log(`[Bypass] ⚠️ Page too small (${htmlLength} bytes), might be incomplete`);
+          // Check if we got real content
+          if (htmlLength > 10000) {
+            const hasRealContent = 
+              responseData.data.html.includes('manga') ||
+              responseData.data.html.includes('chapter') ||
+              responseData.data.html.includes('series') ||
+              responseData.data.html.includes('post-title') ||
+              responseData.data.html.includes('wp-manga');
+              
+            if (hasRealContent) {
+              console.log(`[Bypass] ✓ Valid manga page content!`);
+              return new Response(
+                JSON.stringify({
+                  success: true,
+                  html: responseData.data.html,
+                  status: 200,
+                  method: 'firecrawl',
+                }),
+                { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+              );
+            }
           }
+          
+          console.log(`[Bypass] ⚠️ Page might be incomplete or not manga content`);
         } else {
           const errorMsg = responseData.error || responseData.message || 'Unknown error';
           console.error(`[Bypass] Firecrawl error: ${errorMsg}`);
@@ -82,25 +96,33 @@ serve(async (req) => {
       }
     }
 
-    // Strategy 2: Direct fetch with browser-like headers
+    // Strategy 2: Multiple direct fetch attempts with delays
     console.log(`[Bypass] Trying direct fetch with stealth headers`);
     
     const userAgents = [
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
       'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Safari/605.1.15',
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:133.0) Gecko/20100101 Firefox/133.0',
+      'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
     ];
     
-    for (let attempt = 1; attempt <= 3; attempt++) {
+    let bestHtml = '';
+    let bestLength = 0;
+    
+    for (let attempt = 1; attempt <= 4; attempt++) {
       const userAgent = userAgents[(attempt - 1) % userAgents.length];
       
-      console.log(`[Bypass] Attempt ${attempt}/3 with UA: ${userAgent.substring(0, 50)}...`);
+      console.log(`[Bypass] Attempt ${attempt}/4 with UA: ${userAgent.substring(0, 50)}...`);
       
+      // Add delay between attempts
       if (attempt > 1) {
-        await new Promise(r => setTimeout(r, 2000 + Math.random() * 2000));
+        await new Promise(r => setTimeout(r, 3000 + Math.random() * 3000));
       }
       
       try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 30000);
+        
         const response = await fetch(url, {
           headers: {
             'User-Agent': userAgent,
@@ -117,38 +139,53 @@ serve(async (req) => {
             'sec-ch-ua': '"Chromium";v="131", "Not_A Brand";v="24"',
             'sec-ch-ua-mobile': '?0',
             'sec-ch-ua-platform': '"Windows"',
+            'DNT': '1',
+            'Pragma': 'no-cache',
           },
           redirect: 'follow',
+          signal: controller.signal,
         });
+        
+        clearTimeout(timeoutId);
 
         const html = await response.text();
         const htmlLength = html.length;
         
         console.log(`[Bypass] Got ${htmlLength} bytes, status ${response.status}`);
         
+        // Keep track of best response
+        if (htmlLength > bestLength) {
+          bestHtml = html;
+          bestLength = htmlLength;
+        }
+        
         // Check for Cloudflare challenge
+        const lowerHtml = html.toLowerCase();
         const isChallenge = 
-          html.includes('Checking your browser') ||
-          html.includes('Just a moment') ||
-          html.includes('cf-browser-verification') ||
-          html.includes('challenge-platform') ||
-          (response.status === 403 && html.includes('cloudflare'));
+          lowerHtml.includes('checking your browser') ||
+          lowerHtml.includes('just a moment') ||
+          lowerHtml.includes('cf-browser-verification') ||
+          lowerHtml.includes('challenge-platform') ||
+          lowerHtml.includes('cf_chl_opt') ||
+          (response.status === 403 && lowerHtml.includes('cloudflare'));
         
         if (isChallenge) {
           console.log(`[Bypass] Cloudflare challenge detected, retrying...`);
           continue;
         }
         
-        // Check for valid manga content
+        // Check for valid content
         const hasMangaContent = 
           html.includes('wp-manga') ||
           html.includes('manga-chapter') ||
           html.includes('post-title') ||
           html.includes('summary_image') ||
-          html.includes('chapter') ||
-          htmlLength > 15000;
+          html.includes('chapter-card') ||
+          html.includes('series-thumb') ||
+          html.includes('entry-title') ||
+          htmlLength > 20000;
         
-        if (hasMangaContent) {
+        if (hasMangaContent && response.status === 200) {
           console.log(`[Bypass] ✓ Valid content detected!`);
           return new Response(
             JSON.stringify({
@@ -161,10 +198,24 @@ serve(async (req) => {
           );
         }
         
-        console.log(`[Bypass] No manga content found in response`);
-      } catch (e) {
-        console.error(`[Bypass] Fetch error:`, e);
+        console.log(`[Bypass] No valid manga content found in response`);
+      } catch (e: any) {
+        console.error(`[Bypass] Fetch error:`, e?.message || e);
       }
+    }
+
+    // Return best response if we have one
+    if (bestLength > 5000) {
+      console.log(`[Bypass] Returning best response: ${bestLength} bytes`);
+      return new Response(
+        JSON.stringify({
+          success: true,
+          html: bestHtml,
+          status: 200,
+          method: 'best_effort',
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
     // If all else fails, return error
