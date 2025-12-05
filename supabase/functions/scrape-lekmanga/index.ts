@@ -686,7 +686,98 @@ async function scrapeChapters(mangaUrl: string, source: string, supabase: any) {
 
   const chapters: any[] = [];
   
-  // Try each chapter selector
+  // Special handling for olympustaff - extract chapter range from lastend section
+  const sourceLower = source.toLowerCase();
+  if (sourceLower === 'olympustaff') {
+    console.log(`[Chapters] Using olympustaff chapter generation method`);
+    
+    // Extract first and last chapter numbers from lastend links
+    const firstChapterLink = doc.querySelector('.lastend .inepcx:first-child a');
+    const lastChapterLink = doc.querySelector('.lastend .inepcx:last-child a');
+    
+    let firstChapterNum = 0;
+    let lastChapterNum = 0;
+    
+    // Get chapter count from header
+    const chapterCountEl = doc.querySelector('.chapter-controls h5, .nav-link#chapter-contact-tab');
+    if (chapterCountEl) {
+      const countMatch = chapterCountEl.textContent?.match(/\((\d+)\)/);
+      if (countMatch) {
+        console.log(`[Chapters] Total chapters from header: ${countMatch[1]}`);
+      }
+    }
+    
+    // Extract first chapter number
+    if (firstChapterLink) {
+      const href = firstChapterLink.getAttribute('href') || '';
+      const match = href.match(/\/(\d+\.?\d*)\/?$/);
+      if (match) firstChapterNum = parseFloat(match[1]);
+      console.log(`[Chapters] First chapter: ${firstChapterNum}`);
+    }
+    
+    // Extract last chapter number
+    if (lastChapterLink) {
+      const href = lastChapterLink.getAttribute('href') || '';
+      const match = href.match(/\/(\d+\.?\d*)\/?$/);
+      if (match) lastChapterNum = parseFloat(match[1]);
+      console.log(`[Chapters] Last chapter: ${lastChapterNum}`);
+    }
+    
+    // Also get chapters from the visible chapter cards
+    const visibleChapters = doc.querySelectorAll('.chapter-card');
+    const visibleChapterNums = new Set<number>();
+    
+    visibleChapters.forEach((chapterEl: any) => {
+      const dataNumber = chapterEl.getAttribute('data-number');
+      if (dataNumber) {
+        visibleChapterNums.add(parseFloat(dataNumber));
+        const chapterUrl = chapterEl.querySelector('a.chapter-link')?.getAttribute('href') || '';
+        const title = chapterEl.querySelector('.chapter-title')?.textContent?.trim() || '';
+        const dataDate = chapterEl.getAttribute('data-date');
+        let releaseDate = null;
+        if (dataDate) {
+          const timestamp = parseInt(dataDate);
+          if (timestamp > 0) {
+            releaseDate = new Date(timestamp * 1000).toISOString().split('T')[0];
+          }
+        }
+        
+        chapters.push({
+          chapter_number: parseFloat(dataNumber),
+          title: title || `الفصل ${dataNumber}`,
+          source_url: chapterUrl,
+          release_date: releaseDate,
+        });
+      }
+    });
+    
+    console.log(`[Chapters] Found ${visibleChapters.length} visible chapters`);
+    
+    // Generate missing chapters based on range
+    if (lastChapterNum > firstChapterNum) {
+      const baseUrl = mangaUrl.replace(/\/$/, '');
+      
+      for (let i = Math.floor(firstChapterNum); i <= Math.ceil(lastChapterNum); i++) {
+        if (!visibleChapterNums.has(i)) {
+          chapters.push({
+            chapter_number: i,
+            title: `الفصل ${i}`,
+            source_url: `${baseUrl}/${i}`,
+            release_date: null,
+          });
+        }
+      }
+      
+      console.log(`[Chapters] Generated ${chapters.length} total chapters (${firstChapterNum} to ${lastChapterNum})`);
+    }
+    
+    // Sort chapters by number
+    chapters.sort((a, b) => a.chapter_number - b.chapter_number);
+    console.log(`[Chapters] Success: ${chapters.length} chapters for olympustaff`);
+    return chapters;
+  }
+  
+  // Try each chapter selector for other sources
   for (const chapterSelector of config.selectors.chapters) {
     const chapterElements = doc.querySelectorAll(chapterSelector);
     if (chapterElements.length > 0) {
