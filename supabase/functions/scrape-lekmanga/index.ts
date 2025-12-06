@@ -1344,54 +1344,9 @@ serve(async (req) => {
           
           console.log(`[Chapters] ✓ Saved ${savedCount} chapters`);
           
-          // تحميل صفحات الفصول تلقائياً - ONE AT A TIME to prevent memory issues
-          console.log(`[AutoPages] 🚀 Starting sequential page download for first 5 chapters...`);
-          
-          // Only download first 5 chapters to avoid timeout/memory limits
-          const MAX_CHAPTERS_AUTO = 5;
-          let pagesDownloaded = 0;
-          const chaptersToProcess = savedChapters.slice(0, MAX_CHAPTERS_AUTO);
-          
-          for (let i = 0; i < chaptersToProcess.length; i++) {
-            if (isNearTimeout()) {
-              console.log(`[AutoPages] ⚠️ Timeout approaching, stopping at chapter ${i}`);
-              break;
-            }
-            
-            const chapter = chaptersToProcess[i];
-            try {
-              // Check if chapter already has pages
-              const { count } = await supabase
-                .from('chapter_pages')
-                .select('*', { count: 'exact', head: true })
-                .eq('chapter_id', chapter.id);
-              
-              if (count && count > 0) {
-                console.log(`[AutoPages] ⏭️ Ch ${chapter.chapter_number} has ${count} pages, skip`);
-                continue;
-              }
-              
-              console.log(`[AutoPages] 📥 Ch ${chapter.chapter_number} (${i+1}/${chaptersToProcess.length})...`);
-              const pages = await scrapeChapterPages(chapter.source_url, source, supabase, chapter.id);
-              
-              // Save pages one by one
-              for (const page of pages) {
-                await supabase
-                  .from('chapter_pages')
-                  .upsert({ ...page, chapter_id: chapter.id }, { onConflict: 'chapter_id,page_number' });
-              }
-              
-              pagesDownloaded += pages.length;
-              console.log(`[AutoPages] ✓ Ch ${chapter.chapter_number}: ${pages.length} pages`);
-              
-              // Small delay between chapters
-              await delay(500);
-            } catch (err: any) {
-              console.error(`[AutoPages] ✗ Ch ${chapter.chapter_number}:`, err?.message?.substring(0, 50));
-            }
-          }
-          
-          console.log(`[AutoPages] ✅ Done: ${pagesDownloaded} pages (${chaptersToProcess.length}/${savedChapters.length} chapters)`);
+          // NOTE: Auto page download disabled to prevent WORKER_LIMIT errors
+          // Users can download pages via "استئناف التحميل" (Resume Downloads) feature
+          console.log(`[Info] 📝 Use "استئناف التحميل" to download chapter pages separately`);
         }
 
         await supabase
