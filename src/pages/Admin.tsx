@@ -6,7 +6,7 @@ import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Database, Download, RefreshCw, CheckCircle, XCircle, Clock, Plus, BookPlus, Globe, Users } from "lucide-react";
+import { Database, Download, RefreshCw, CheckCircle, XCircle, Clock, Plus, BookPlus, Globe, Users, Calendar, DownloadCloud } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { AddMangaForm } from "@/components/admin/AddMangaForm";
 import { AddChapterForm } from "@/components/admin/AddChapterForm";
@@ -17,6 +17,8 @@ import { CloudflareNotice } from "@/components/admin/CloudflareNotice";
 import { TeamsManager } from "@/components/admin/TeamsManager";
 import { MangaManager } from "@/components/admin/MangaManager";
 import { DatabaseBackup } from "@/components/admin/DatabaseBackup";
+import { ScheduledUpdates } from "@/components/admin/ScheduledUpdates";
+import { ResumeDownloads } from "@/components/admin/ResumeDownloads";
 import { useNavigate } from "react-router-dom";
 
 const Admin = () => {
@@ -272,22 +274,34 @@ const Admin = () => {
 
           {/* Tabs */}
           <Tabs defaultValue="manga" className="w-full">
-            <TabsList className="grid w-full max-w-6xl grid-cols-11">
+            <TabsList className="grid w-full max-w-6xl grid-cols-13 gap-1">
               <TabsTrigger value="manage">إدارة المانجا</TabsTrigger>
               <TabsTrigger value="manga">مانجا</TabsTrigger>
               <TabsTrigger value="manhwa">مانهوا</TabsTrigger>
               <TabsTrigger value="manhua">مانها</TabsTrigger>
-              <TabsTrigger value="teams"><Users className="w-4 h-4 mr-2" />الفرق</TabsTrigger>
-              <TabsTrigger value="add-manga"><Plus className="w-4 h-4 mr-2" />إضافة</TabsTrigger>
-              <TabsTrigger value="add-chapter"><BookPlus className="w-4 h-4 mr-2" />فصل يدوي</TabsTrigger>
-              <TabsTrigger value="add-chapter-source"><Globe className="w-4 h-4 mr-2" />فصل من رابط</TabsTrigger>
-              <TabsTrigger value="sources"><Globe className="w-4 h-4 mr-2" />المصادر</TabsTrigger>
-              <TabsTrigger value="jobs"><Database className="w-4 h-4 mr-2" />المهام</TabsTrigger>
-              <TabsTrigger value="backup"><Download className="w-4 h-4 mr-2" />نسخ احتياطي</TabsTrigger>
+              <TabsTrigger value="teams"><Users className="w-4 h-4 mr-1" />الفرق</TabsTrigger>
+              <TabsTrigger value="schedule"><Calendar className="w-4 h-4 mr-1" />جدولة</TabsTrigger>
+              <TabsTrigger value="resume"><DownloadCloud className="w-4 h-4 mr-1" />استئناف</TabsTrigger>
+              <TabsTrigger value="add-manga"><Plus className="w-4 h-4 mr-1" />إضافة</TabsTrigger>
+              <TabsTrigger value="add-chapter"><BookPlus className="w-4 h-4 mr-1" />فصل يدوي</TabsTrigger>
+              <TabsTrigger value="add-chapter-source"><Globe className="w-4 h-4 mr-1" />فصل من رابط</TabsTrigger>
+              <TabsTrigger value="sources"><Globe className="w-4 h-4 mr-1" />المصادر</TabsTrigger>
+              <TabsTrigger value="jobs"><Database className="w-4 h-4 mr-1" />المهام</TabsTrigger>
+              <TabsTrigger value="backup"><Download className="w-4 h-4 mr-1" />نسخ</TabsTrigger>
             </TabsList>
 
             <TabsContent value="manage" className="mt-6">
               <MangaManager />
+            </TabsContent>
+
+            {/* Schedule Tab */}
+            <TabsContent value="schedule" className="mt-6">
+              <ScheduledUpdates />
+            </TabsContent>
+
+            {/* Resume Downloads Tab */}
+            <TabsContent value="resume" className="mt-6">
+              <ResumeDownloads />
             </TabsContent>
             
             {/* Manga Tab */}

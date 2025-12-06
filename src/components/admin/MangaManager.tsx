@@ -388,14 +388,48 @@ const EditMangaForm = ({ manga, onUpdate }: { manga: any; onUpdate: () => void }
     author: manga.author || '',
     artist: manga.artist || '',
     status: manga.status || 'ongoing',
+    cover_url: manga.cover_url || '',
+    banner_url: manga.banner_url || '',
+    country: manga.country || '',
+    publisher: manga.publisher || '',
+    year: manga.year || '',
+    rating: manga.rating || 0,
+    language: manga.language || '',
+    reading_direction: manga.reading_direction || 'rtl',
+    publish_status: manga.publish_status || 'published',
+    alternative_titles: manga.alternative_titles?.join(', ') || '',
+    tags: manga.tags?.join(', ') || '',
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    const updateData: any = {
+      title: formData.title,
+      description: formData.description,
+      author: formData.author || null,
+      artist: formData.artist || null,
+      status: formData.status,
+      cover_url: formData.cover_url || null,
+      banner_url: formData.banner_url || null,
+      country: formData.country || null,
+      publisher: formData.publisher || null,
+      year: formData.year ? parseInt(formData.year) : null,
+      rating: formData.rating || null,
+      language: formData.language || null,
+      reading_direction: formData.reading_direction || null,
+      publish_status: formData.publish_status || 'published',
+      alternative_titles: formData.alternative_titles 
+        ? formData.alternative_titles.split(',').map((t: string) => t.trim()).filter(Boolean)
+        : null,
+      tags: formData.tags 
+        ? formData.tags.split(',').map((t: string) => t.trim()).filter(Boolean)
+        : null,
+    };
+
     const { error } = await supabase
       .from('manga')
-      .update(formData)
+      .update(updateData)
       .eq('id', manga.id);
 
     if (error) {
@@ -415,25 +449,34 @@ const EditMangaForm = ({ manga, onUpdate }: { manga: any; onUpdate: () => void }
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <div>
-        <Label>العنوان</Label>
-        <Input
-          value={formData.title}
-          onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-          required
-        />
-      </div>
-
-      <div>
-        <Label>الوصف</Label>
-        <textarea
-          className="w-full min-h-[100px] rounded-md border border-input bg-background px-3 py-2"
-          value={formData.description}
-          onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-        />
-      </div>
-
       <div className="grid grid-cols-2 gap-4">
+        <div className="col-span-2">
+          <Label>العنوان</Label>
+          <Input
+            value={formData.title}
+            onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+            required
+          />
+        </div>
+
+        <div className="col-span-2">
+          <Label>الأسماء البديلة (مفصولة بفاصلة)</Label>
+          <Input
+            value={formData.alternative_titles}
+            onChange={(e) => setFormData({ ...formData, alternative_titles: e.target.value })}
+            placeholder="الاسم الإنجليزي, الاسم الياباني"
+          />
+        </div>
+
+        <div className="col-span-2">
+          <Label>الوصف</Label>
+          <textarea
+            className="w-full min-h-[100px] rounded-md border border-input bg-background px-3 py-2"
+            value={formData.description}
+            onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+          />
+        </div>
+
         <div>
           <Label>المؤلف</Label>
           <Input
@@ -449,20 +492,134 @@ const EditMangaForm = ({ manga, onUpdate }: { manga: any; onUpdate: () => void }
             onChange={(e) => setFormData({ ...formData, artist: e.target.value })}
           />
         </div>
-      </div>
 
-      <div>
-        <Label>الحالة</Label>
-        <select
-          className="w-full rounded-md border border-input bg-background px-3 py-2"
-          value={formData.status}
-          onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-        >
-          <option value="ongoing">مستمر</option>
-          <option value="completed">مكتمل</option>
-          <option value="hiatus">متوقف</option>
-          <option value="cancelled">ملغي</option>
-        </select>
+        <div>
+          <Label>الحالة</Label>
+          <select
+            className="w-full rounded-md border border-input bg-background px-3 py-2"
+            value={formData.status}
+            onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+          >
+            <option value="ongoing">مستمر</option>
+            <option value="completed">مكتمل</option>
+            <option value="hiatus">متوقف</option>
+            <option value="cancelled">ملغي</option>
+          </select>
+        </div>
+
+        <div>
+          <Label>حالة النشر</Label>
+          <select
+            className="w-full rounded-md border border-input bg-background px-3 py-2"
+            value={formData.publish_status}
+            onChange={(e) => setFormData({ ...formData, publish_status: e.target.value })}
+          >
+            <option value="published">منشور</option>
+            <option value="draft">مسودة</option>
+            <option value="pending">قيد المراجعة</option>
+          </select>
+        </div>
+
+        <div>
+          <Label>البلد/النوع</Label>
+          <select
+            className="w-full rounded-md border border-input bg-background px-3 py-2"
+            value={formData.country}
+            onChange={(e) => setFormData({ ...formData, country: e.target.value })}
+          >
+            <option value="">غير محدد</option>
+            <option value="japan">مانجا (اليابان)</option>
+            <option value="korea">مانهوا (كوريا)</option>
+            <option value="china">مانها (الصين)</option>
+            <option value="other">أخرى</option>
+          </select>
+        </div>
+
+        <div>
+          <Label>سنة الإصدار</Label>
+          <Input
+            type="number"
+            value={formData.year}
+            onChange={(e) => setFormData({ ...formData, year: e.target.value })}
+            min="1900"
+            max="2030"
+          />
+        </div>
+
+        <div>
+          <Label>التقييم</Label>
+          <Input
+            type="number"
+            step="0.1"
+            min="0"
+            max="10"
+            value={formData.rating}
+            onChange={(e) => setFormData({ ...formData, rating: parseFloat(e.target.value) || 0 })}
+          />
+        </div>
+
+        <div>
+          <Label>الناشر</Label>
+          <Input
+            value={formData.publisher}
+            onChange={(e) => setFormData({ ...formData, publisher: e.target.value })}
+          />
+        </div>
+
+        <div>
+          <Label>اللغة</Label>
+          <select
+            className="w-full rounded-md border border-input bg-background px-3 py-2"
+            value={formData.language}
+            onChange={(e) => setFormData({ ...formData, language: e.target.value })}
+          >
+            <option value="">غير محدد</option>
+            <option value="ar">العربية</option>
+            <option value="ja">اليابانية</option>
+            <option value="ko">الكورية</option>
+            <option value="zh">الصينية</option>
+            <option value="en">الإنجليزية</option>
+          </select>
+        </div>
+
+        <div>
+          <Label>اتجاه القراءة</Label>
+          <select
+            className="w-full rounded-md border border-input bg-background px-3 py-2"
+            value={formData.reading_direction}
+            onChange={(e) => setFormData({ ...formData, reading_direction: e.target.value })}
+          >
+            <option value="rtl">من اليمين لليسار (مانجا)</option>
+            <option value="ltr">من اليسار لليمين (مانهوا/ويب تون)</option>
+          </select>
+        </div>
+
+        <div className="col-span-2">
+          <Label>رابط الغلاف</Label>
+          <Input
+            value={formData.cover_url}
+            onChange={(e) => setFormData({ ...formData, cover_url: e.target.value })}
+            dir="ltr"
+          />
+        </div>
+
+        <div className="col-span-2">
+          <Label>رابط البانر</Label>
+          <Input
+            value={formData.banner_url}
+            onChange={(e) => setFormData({ ...formData, banner_url: e.target.value })}
+            dir="ltr"
+          />
+        </div>
+
+        <div className="col-span-2">
+          <Label>الوسوم (مفصولة بفاصلة)</Label>
+          <Input
+            value={formData.tags}
+            onChange={(e) => setFormData({ ...formData, tags: e.target.value })}
+            placeholder="أكشن, مغامرات, خيال"
+          />
+        </div>
       </div>
 
       <Button type="submit" className="w-full">
