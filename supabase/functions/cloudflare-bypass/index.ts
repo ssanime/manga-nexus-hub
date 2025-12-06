@@ -154,6 +154,55 @@ async function useFlareSolverr(url: string): Promise<{ success: boolean; html?: 
   }
 }
 
+// CloudProxy API integration (same API format as FlareSolverr)
+async function useCloudProxy(url: string): Promise<{ success: boolean; html?: string; error?: string }> {
+  const cloudProxyUrl = Deno.env.get('CLOUDPROXY_URL');
+  
+  if (!cloudProxyUrl) {
+    console.log('[Bypass] CloudProxy URL not configured');
+    return { success: false, error: 'CloudProxy not configured' };
+  }
+
+  console.log(`[Bypass] Using CloudProxy at: ${cloudProxyUrl}`);
+  
+  try {
+    const response = await fetch(`${cloudProxyUrl}/v1`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        cmd: 'request.get',
+        url: url,
+        maxTimeout: 60000,
+        userAgent: USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)],
+      }),
+    });
+
+    const result = await response.json();
+    
+    if (result.status === 'ok' && result.solution?.response) {
+      console.log(`[Bypass] CloudProxy success: ${result.solution.response.length} bytes`);
+      return {
+        success: true,
+        html: result.solution.response,
+      };
+    } else {
+      console.log(`[Bypass] CloudProxy failed: ${result.message || 'Unknown error'}`);
+      return {
+        success: false,
+        error: result.message || 'CloudProxy failed',
+      };
+    }
+  } catch (e: any) {
+    console.error('[Bypass] CloudProxy exception:', e?.message);
+    return {
+      success: false,
+      error: e?.message || 'CloudProxy exception',
+    };
+  }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -190,6 +239,31 @@ serve(async (req) => {
             html,
             status: 200,
             method: 'flaresolverr',
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
+      if (html.length > bestLength) {
+        bestHtml = html;
+        bestLength = html.length;
+      }
+    }
+
+    // Strategy 0.5: CloudProxy (puppeteer-based)
+    console.log(`[Bypass] Strategy 0.5: CloudProxy`);
+    const cloudProxyResult = await useCloudProxy(url);
+    
+    if (cloudProxyResult.success && cloudProxyResult.html) {
+      const html = cloudProxyResult.html;
+      if (hasValidMangaContent(html) && !isCloudflareChallenge(html, 200)) {
+        console.log(`[Bypass] ✓ CloudProxy success with valid content!`);
+        return new Response(
+          JSON.stringify({
+            success: true,
+            html,
+            status: 200,
+            method: 'cloudproxy',
           }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
