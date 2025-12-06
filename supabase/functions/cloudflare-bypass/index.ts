@@ -14,17 +14,12 @@ interface BypassRequest {
 
 // Multiple User-Agents mimicking real browsers
 const USER_AGENTS = [
-  // Chrome on Windows
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
-  // Chrome on Mac
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-  // Firefox
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:133.0) Gecko/20100101 Firefox/133.0',
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:133.0) Gecko/20100101 Firefox/133.0',
-  // Safari
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Safari/605.1.15',
-  // Edge
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0',
 ];
 
@@ -68,7 +63,7 @@ function hasValidMangaContent(html: string): boolean {
     'wp-manga', 'manga-chapter', 'post-title', 'summary_image',
     'chapter-card', 'series-thumb', 'entry-title', 'manga-title',
     'chapter-list', 'reading-content', 'manga-name', 'chapters',
-    'الفصل', 'المانجا', 'مانجا', 'فصول', // Arabic keywords
+    'الفصل', 'المانجا', 'مانجا', 'فصول',
   ];
   
   const matchCount = mangaIndicators.filter(p => lowerHtml.includes(p)).length;
@@ -94,7 +89,6 @@ function buildStealthHeaders(userAgent: string, referer?: string, cookieStr?: st
     'Pragma': 'no-cache',
   };
   
-  // Add Chrome-specific headers
   if (userAgent.includes('Chrome')) {
     headers['sec-ch-ua'] = '"Chromium";v="131", "Not_A Brand";v="24"';
     headers['sec-ch-ua-mobile'] = '?0';
@@ -110,6 +104,54 @@ function buildStealthHeaders(userAgent: string, referer?: string, cookieStr?: st
   }
   
   return headers;
+}
+
+// FlareSolverr API integration
+async function useFlareSolverr(url: string): Promise<{ success: boolean; html?: string; error?: string }> {
+  const flareSolverrUrl = Deno.env.get('FLARESOLVERR_URL');
+  
+  if (!flareSolverrUrl) {
+    console.log('[Bypass] FlareSolverr URL not configured');
+    return { success: false, error: 'FlareSolverr not configured' };
+  }
+
+  console.log(`[Bypass] Using FlareSolverr at: ${flareSolverrUrl}`);
+  
+  try {
+    const response = await fetch(`${flareSolverrUrl}/v1`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        cmd: 'request.get',
+        url: url,
+        maxTimeout: 60000,
+      }),
+    });
+
+    const result = await response.json();
+    
+    if (result.status === 'ok' && result.solution?.response) {
+      console.log(`[Bypass] FlareSolverr success: ${result.solution.response.length} bytes`);
+      return {
+        success: true,
+        html: result.solution.response,
+      };
+    } else {
+      console.log(`[Bypass] FlareSolverr failed: ${result.message || 'Unknown error'}`);
+      return {
+        success: false,
+        error: result.message || 'FlareSolverr failed',
+      };
+    }
+  } catch (e: any) {
+    console.error('[Bypass] FlareSolverr exception:', e?.message);
+    return {
+      success: false,
+      error: e?.message || 'FlareSolverr exception',
+    };
+  }
 }
 
 serve(async (req) => {
@@ -134,7 +176,32 @@ serve(async (req) => {
     let bestLength = 0;
     let lastError = '';
 
-    // Strategy 1: Firecrawl API (best for Cloudflare sites)
+    // Strategy 0: FlareSolverr (best for heavy Cloudflare protection)
+    console.log(`[Bypass] Strategy 0: FlareSolverr`);
+    const flareSolverResult = await useFlareSolverr(url);
+    
+    if (flareSolverResult.success && flareSolverResult.html) {
+      const html = flareSolverResult.html;
+      if (hasValidMangaContent(html) && !isCloudflareChallenge(html, 200)) {
+        console.log(`[Bypass] ✓ FlareSolverr success with valid content!`);
+        return new Response(
+          JSON.stringify({
+            success: true,
+            html,
+            status: 200,
+            method: 'flaresolverr',
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
+      if (html.length > bestLength) {
+        bestHtml = html;
+        bestLength = html.length;
+      }
+    }
+
+    // Strategy 1: Firecrawl API
     const firecrawlApiKey = Deno.env.get('FIRECRAWL_API_KEY');
     
     if (firecrawlApiKey) {
@@ -191,7 +258,6 @@ serve(async (req) => {
             console.log(`[Bypass] Firecrawl error: ${lastError}`);
           }
           
-          // Wait before retry
           if (attempt < 2) {
             await new Promise(r => setTimeout(r, 3000));
           }
@@ -202,7 +268,7 @@ serve(async (req) => {
       }
     }
 
-    // Strategy 2: Direct fetch with stealth headers and cookie persistence
+    // Strategy 2: Direct fetch with stealth headers
     console.log(`[Bypass] Strategy 2: Direct fetch with stealth headers`);
     
     let cookies: string[] = [];
@@ -232,7 +298,6 @@ serve(async (req) => {
         
         clearTimeout(timeoutId);
 
-        // Save cookies for next attempt
         const setCookie = response.headers.get('set-cookie');
         if (setCookie) {
           const newCookies = setCookie.split(',').map(c => c.split(';')[0].trim());
@@ -251,13 +316,11 @@ serve(async (req) => {
           bestLength = htmlLength;
         }
         
-        // Check for Cloudflare challenge
         if (isCloudflareChallenge(html, status)) {
           console.log(`[Bypass] Cloudflare challenge detected, continuing...`);
           continue;
         }
         
-        // Check for valid content
         if (hasValidMangaContent(html) && status === 200) {
           console.log(`[Bypass] ✓ Valid content detected!`);
           return new Response(
@@ -271,7 +334,6 @@ serve(async (req) => {
           );
         }
         
-        // Accept shorter content if it looks valid
         if (htmlLength > 15000 && status === 200 && !isCloudflareChallenge(html, status)) {
           console.log(`[Bypass] ✓ Accepting content based on size`);
           return new Response(
@@ -305,7 +367,6 @@ serve(async (req) => {
       );
     }
 
-    // All methods failed
     console.log(`[Bypass] ❌ All bypass methods failed. Best: ${bestLength} bytes`);
     return new Response(
       JSON.stringify({
