@@ -936,28 +936,36 @@ async function scrapeChapters(mangaUrl: string, source: string, supabase: any) {
   return chapters;
 }
 
-// Helper function to download and upload image to Supabase Storage
+// Helper function to download and upload image to Supabase Storage - MEMORY OPTIMIZED
 async function downloadAndUploadImage(imageUrl: string, supabase: any, bucket: string, path: string): Promise<string | null> {
   try {
-    console.log(`[Storage] Downloading image: ${imageUrl}`);
+    // Use AbortController for timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout per image
     
     const response = await fetch(imageUrl, {
-      headers: getBrowserHeaders()
+      headers: getBrowserHeaders(),
+      signal: controller.signal,
     });
+    clearTimeout(timeoutId);
     
     if (!response.ok) {
-      console.error(`[Storage] Failed to download image: ${response.status}`);
+      console.error(`[Storage] Failed: ${response.status}`);
       return null;
     }
     
-    const blob = await response.blob();
-    const arrayBuffer = await blob.arrayBuffer();
+    // Stream directly to avoid memory bloat - use arrayBuffer directly
+    const arrayBuffer = await response.arrayBuffer();
     const uint8Array = new Uint8Array(arrayBuffer);
     
-    // Determine content type
+    // Check size - skip very large images to prevent memory issues
+    if (uint8Array.length > 5 * 1024 * 1024) { // Skip images > 5MB
+      console.warn(`[Storage] ⚠️ Image too large (${(uint8Array.length / 1024 / 1024).toFixed(1)}MB), skipping`);
+      return null;
+    }
+    
     const contentType = response.headers.get('content-type') || 'image/jpeg';
     
-    // Upload to Supabase Storage
     const { data, error } = await supabase.storage
       .from(bucket)
       .upload(path, uint8Array, {
@@ -966,19 +974,22 @@ async function downloadAndUploadImage(imageUrl: string, supabase: any, bucket: s
       });
     
     if (error) {
-      console.error(`[Storage] Upload error:`, error);
+      console.error(`[Storage] Upload error:`, error.message);
       return null;
     }
     
-    // Get public URL
     const { data: { publicUrl } } = supabase.storage
       .from(bucket)
       .getPublicUrl(path);
     
-    console.log(`[Storage] ✓ Uploaded successfully`);
+    console.log(`[Storage] ✓ Uploaded`);
     return publicUrl;
   } catch (error: any) {
-    console.error(`[Storage] Error:`, error?.message || error);
+    if (error.name === 'AbortError') {
+      console.error(`[Storage] Timeout downloading image`);
+    } else {
+      console.error(`[Storage] Error:`, error?.message?.substring(0, 50));
+    }
     return null;
   }
 }
@@ -1012,10 +1023,13 @@ async function scrapeChapterPages(chapterUrl: string, source: string, supabase: 
     return pages;
   }
   
-  console.log(`[Pages] Processing ${allImages.length} images...`);
+  console.log(`[Pages] Processing ${allImages.length} images sequentially...`);
   
-  // Process ALL images without limit
-  for (let index = 0; index < allImages.length; index++) {
+  // Process images ONE BY ONE to prevent memory exhaustion
+  const MAX_PAGES = 60; // Limit to prevent timeout
+  const imagesToProcess = Math.min(allImages.length, MAX_PAGES);
+  
+  for (let index = 0; index < imagesToProcess; index++) {
     const img = allImages[index] as any;
     let imageUrl = img.getAttribute('src') || 
                    img.getAttribute('data-src') || 
@@ -1023,24 +1037,20 @@ async function scrapeChapterPages(chapterUrl: string, source: string, supabase: 
                    img.getAttribute('data-original') || '';
     
     if (imageUrl) {
-      // Clean URL from whitespace, tabs, newlines
       imageUrl = cleanUrl(imageUrl);
       
-      // Fix URL construction - don't add baseUrl if already absolute
       if (!imageUrl.startsWith('http')) {
         if (imageUrl.startsWith('//')) {
           imageUrl = 'https:' + imageUrl;
         } else if (imageUrl.startsWith('/')) {
           imageUrl = config.baseUrl + imageUrl;
         } else {
-          // Relative path without leading slash
           imageUrl = config.baseUrl + '/' + imageUrl;
         }
       }
       
-      console.log(`[Pages] Processing page ${index + 1}/${allImages.length}: ${imageUrl.substring(0, 60)}...`);
+      console.log(`[Pages] ${index + 1}/${imagesToProcess}: ${imageUrl.substring(0, 50)}...`);
       
-      // Download and upload to storage
       const fileName = `${chapterId}/page-${index + 1}.jpg`;
       const uploadedUrl = await downloadAndUploadImage(imageUrl, supabase, 'chapter-pages', fileName);
       
@@ -1049,11 +1059,12 @@ async function scrapeChapterPages(chapterUrl: string, source: string, supabase: 
           page_number: index + 1,
           image_url: uploadedUrl,
         });
-        console.log(`[Pages] ✓ Uploaded page ${index + 1}/${allImages.length}`);
-      } else {
-        console.error(`[Pages] ✗ Failed to upload page ${index + 1}`);
       }
     }
+  }
+  
+  if (allImages.length > MAX_PAGES) {
+    console.log(`[Pages] ⚠️ Limited to ${MAX_PAGES}/${allImages.length} pages`);
   }
 
   console.log(`[Pages] Success: ${pages.length} pages`);
@@ -1333,55 +1344,54 @@ serve(async (req) => {
           
           console.log(`[Chapters] ✓ Saved ${savedCount} chapters`);
           
-          // تحميل صفحات الفصول تلقائياً في الخلفية
-          console.log(`[AutoPages] 🚀 Starting automatic page download for ${savedChapters.length} chapters...`);
+          // تحميل صفحات الفصول تلقائياً - ONE AT A TIME to prevent memory issues
+          console.log(`[AutoPages] 🚀 Starting sequential page download for first 5 chapters...`);
           
-          // Download pages for all chapters in parallel (batches of 3)
-          const BATCH_SIZE = 3;
+          // Only download first 5 chapters to avoid timeout/memory limits
+          const MAX_CHAPTERS_AUTO = 5;
           let pagesDownloaded = 0;
+          const chaptersToProcess = savedChapters.slice(0, MAX_CHAPTERS_AUTO);
           
-          for (let i = 0; i < savedChapters.length && !isNearTimeout(); i += BATCH_SIZE) {
-            const batch = savedChapters.slice(i, i + BATCH_SIZE);
+          for (let i = 0; i < chaptersToProcess.length; i++) {
+            if (isNearTimeout()) {
+              console.log(`[AutoPages] ⚠️ Timeout approaching, stopping at chapter ${i}`);
+              break;
+            }
             
-            const batchPromises = batch.map(async (chapter: any) => {
-              try {
-                // Check if chapter already has pages
-                const { count } = await supabase
-                  .from('chapter_pages')
-                  .select('*', { count: 'exact', head: true })
-                  .eq('chapter_id', chapter.id);
-                
-                if (count && count > 0) {
-                  console.log(`[AutoPages] ⏭️ Chapter ${chapter.chapter_number} already has ${count} pages, skipping`);
-                  return 0;
-                }
-                
-                console.log(`[AutoPages] 📥 Downloading pages for chapter ${chapter.chapter_number}...`);
-                const pages = await scrapeChapterPages(chapter.source_url, source, supabase, chapter.id);
-                
-                // Save pages
-                for (const page of pages) {
-                  await supabase
-                    .from('chapter_pages')
-                    .upsert({ ...page, chapter_id: chapter.id }, { onConflict: 'chapter_id,page_number' });
-                }
-                
-                console.log(`[AutoPages] ✓ Chapter ${chapter.chapter_number}: ${pages.length} pages`);
-                return pages.length;
-              } catch (err: any) {
-                console.error(`[AutoPages] ✗ Chapter ${chapter.chapter_number} failed:`, err?.message?.substring(0, 100));
-                return 0;
+            const chapter = chaptersToProcess[i];
+            try {
+              // Check if chapter already has pages
+              const { count } = await supabase
+                .from('chapter_pages')
+                .select('*', { count: 'exact', head: true })
+                .eq('chapter_id', chapter.id);
+              
+              if (count && count > 0) {
+                console.log(`[AutoPages] ⏭️ Ch ${chapter.chapter_number} has ${count} pages, skip`);
+                continue;
               }
-            });
-            
-            const results = await Promise.all(batchPromises);
-            pagesDownloaded += results.reduce((a, b) => a + b, 0);
-            
-            // Small delay between batches
-            await delay(1000);
+              
+              console.log(`[AutoPages] 📥 Ch ${chapter.chapter_number} (${i+1}/${chaptersToProcess.length})...`);
+              const pages = await scrapeChapterPages(chapter.source_url, source, supabase, chapter.id);
+              
+              // Save pages one by one
+              for (const page of pages) {
+                await supabase
+                  .from('chapter_pages')
+                  .upsert({ ...page, chapter_id: chapter.id }, { onConflict: 'chapter_id,page_number' });
+              }
+              
+              pagesDownloaded += pages.length;
+              console.log(`[AutoPages] ✓ Ch ${chapter.chapter_number}: ${pages.length} pages`);
+              
+              // Small delay between chapters
+              await delay(500);
+            } catch (err: any) {
+              console.error(`[AutoPages] ✗ Ch ${chapter.chapter_number}:`, err?.message?.substring(0, 50));
+            }
           }
           
-          console.log(`[AutoPages] ✅ Completed: ${pagesDownloaded} total pages downloaded`);
+          console.log(`[AutoPages] ✅ Done: ${pagesDownloaded} pages (${chaptersToProcess.length}/${savedChapters.length} chapters)`);
         }
 
         await supabase
