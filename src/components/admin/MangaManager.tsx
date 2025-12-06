@@ -382,6 +382,16 @@ const ChaptersList = ({ mangaId, onDeleteChapter }: { mangaId: string; onDeleteC
 
 const EditMangaForm = ({ manga, onUpdate }: { manga: any; onUpdate: () => void }) => {
   const { toast } = useToast();
+  
+  // Detect work type from genres or country
+  const getWorkType = () => {
+    const genres = manga.genres || [];
+    if (genres.includes('مانهوا') || manga.country === 'korea') return 'manhwa';
+    if (genres.includes('مانها') || manga.country === 'china') return 'manhua';
+    if (genres.includes('مانجا') || manga.country === 'japan') return 'manga';
+    return '';
+  };
+
   const [formData, setFormData] = useState({
     title: manga.title || '',
     description: manga.description || '',
@@ -399,10 +409,30 @@ const EditMangaForm = ({ manga, onUpdate }: { manga: any; onUpdate: () => void }
     publish_status: manga.publish_status || 'published',
     alternative_titles: manga.alternative_titles?.join(', ') || '',
     tags: manga.tags?.join(', ') || '',
+    work_type: getWorkType(),
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Map work_type to country
+    let country = formData.country;
+    if (formData.work_type === 'manga') country = 'japan';
+    else if (formData.work_type === 'manhwa') country = 'korea';
+    else if (formData.work_type === 'manhua') country = 'china';
+    
+    // Update genres to include work type
+    let existingGenres = manga.genres || [];
+    // Remove old work type genres
+    existingGenres = existingGenres.filter((g: string) => !['مانجا', 'مانهوا', 'مانها'].includes(g));
+    // Add new work type genre
+    if (formData.work_type === 'manga' && !existingGenres.includes('مانجا')) {
+      existingGenres = ['مانجا', ...existingGenres];
+    } else if (formData.work_type === 'manhwa' && !existingGenres.includes('مانهوا')) {
+      existingGenres = ['مانهوا', ...existingGenres];
+    } else if (formData.work_type === 'manhua' && !existingGenres.includes('مانها')) {
+      existingGenres = ['مانها', ...existingGenres];
+    }
     
     const updateData: any = {
       title: formData.title,
@@ -412,13 +442,14 @@ const EditMangaForm = ({ manga, onUpdate }: { manga: any; onUpdate: () => void }
       status: formData.status,
       cover_url: formData.cover_url || null,
       banner_url: formData.banner_url || null,
-      country: formData.country || null,
+      country: country || null,
       publisher: formData.publisher || null,
       year: formData.year ? parseInt(formData.year) : null,
       rating: formData.rating || null,
       language: formData.language || null,
       reading_direction: formData.reading_direction || null,
       publish_status: formData.publish_status || 'published',
+      genres: existingGenres,
       alternative_titles: formData.alternative_titles 
         ? formData.alternative_titles.split(',').map((t: string) => t.trim()).filter(Boolean)
         : null,
@@ -508,6 +539,20 @@ const EditMangaForm = ({ manga, onUpdate }: { manga: any; onUpdate: () => void }
         </div>
 
         <div>
+          <Label>نوع العمل</Label>
+          <select
+            className="w-full rounded-md border border-input bg-background px-3 py-2"
+            value={formData.work_type}
+            onChange={(e) => setFormData({ ...formData, work_type: e.target.value })}
+          >
+            <option value="">غير محدد</option>
+            <option value="manga">مانجا (اليابان)</option>
+            <option value="manhwa">مانهوا (كوريا)</option>
+            <option value="manhua">مانها (الصين)</option>
+          </select>
+        </div>
+
+        <div>
           <Label>حالة النشر</Label>
           <select
             className="w-full rounded-md border border-input bg-background px-3 py-2"
@@ -521,18 +566,12 @@ const EditMangaForm = ({ manga, onUpdate }: { manga: any; onUpdate: () => void }
         </div>
 
         <div>
-          <Label>البلد/النوع</Label>
-          <select
-            className="w-full rounded-md border border-input bg-background px-3 py-2"
+          <Label>البلد</Label>
+          <Input
             value={formData.country}
             onChange={(e) => setFormData({ ...formData, country: e.target.value })}
-          >
-            <option value="">غير محدد</option>
-            <option value="japan">مانجا (اليابان)</option>
-            <option value="korea">مانهوا (كوريا)</option>
-            <option value="china">مانها (الصين)</option>
-            <option value="other">أخرى</option>
-          </select>
+            placeholder="اليابان، كوريا، الصين..."
+          />
         </div>
 
         <div>
