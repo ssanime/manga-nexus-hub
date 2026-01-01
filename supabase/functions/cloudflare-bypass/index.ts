@@ -55,15 +55,22 @@ function isCloudflareChallenge(html: string, status: number): boolean {
   );
 }
 
-// Check if HTML contains valid manga content
+// Check if HTML contains valid manga content - Enhanced detection
 function hasValidMangaContent(html: string): boolean {
   const lowerHtml = html.toLowerCase();
   
+  // Strong indicators for manga sites
   const mangaIndicators = [
     'wp-manga', 'manga-chapter', 'post-title', 'summary_image',
     'chapter-card', 'series-thumb', 'entry-title', 'manga-title',
     'chapter-list', 'reading-content', 'manga-name', 'chapters',
     'الفصل', 'المانجا', 'مانجا', 'فصول',
+    // Additional indicators
+    'manga', 'manhwa', 'manhua', 'webtoon', 'comic',
+    'chapter', 'episode', 'page-break', 'reader',
+    'genres', 'author', 'artist', 'status',
+    '<h1', '<h2', '<article', '<main',
+    'og:title', 'og:image', 'og:description',
   ];
   
   const matchCount = mangaIndicators.filter(p => lowerHtml.includes(p)).length;

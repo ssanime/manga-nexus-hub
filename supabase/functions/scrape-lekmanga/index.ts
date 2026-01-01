@@ -453,18 +453,26 @@ async function fetchHTML(url: string, config: any, retryCount = 0): Promise<stri
 
 // Smart selector matcher - tries multiple selectors and finds best match
 function smartSelect(doc: any, selectors: string[], type: 'text' | 'attr' = 'text', attr = 'src'): string | null {
-  for (const selector of selectors) {
+  // Handle both array and single string selectors
+  const selectorList = Array.isArray(selectors) ? selectors : [selectors];
+  
+  for (const selector of selectorList) {
     try {
       const element = doc.querySelector(selector);
       if (element) {
         if (type === 'text') {
           const text = element.textContent?.trim();
           if (text && text.length > 0) {
-            console.log(`[Smart] Found with selector: ${selector}`);
+            console.log(`[Smart] Found with selector: ${selector} -> "${text.substring(0, 50)}..."`);
             return text;
           }
         } else {
-          const value = element.getAttribute(attr) || element.getAttribute('data-' + attr);
+          // Try multiple attributes
+          const value = element.getAttribute(attr) || 
+                       element.getAttribute('data-' + attr) ||
+                       element.getAttribute('data-src') ||
+                       element.getAttribute('data-lazy-src') ||
+                       element.getAttribute('data-original');
           if (value) {
             console.log(`[Smart] Found ${attr} with selector: ${selector}`);
             return value;
@@ -475,6 +483,27 @@ function smartSelect(doc: any, selectors: string[], type: 'text' | 'attr' = 'tex
       // Try next selector
     }
   }
+  
+  // Extended fallback search for common patterns
+  if (type === 'text') {
+    // Try common title patterns
+    const fallbackSelectors = ['h1', '.post-title', '.entry-title', '.manga-title', '.series-title', 'title'];
+    for (const fallback of fallbackSelectors) {
+      if (!selectorList.includes(fallback)) {
+        try {
+          const el = doc.querySelector(fallback);
+          if (el) {
+            const text = el.textContent?.trim();
+            if (text && text.length > 2 && text.length < 200) {
+              console.log(`[Smart] Fallback found with: ${fallback}`);
+              return text;
+            }
+          }
+        } catch (e) {}
+      }
+    }
+  }
+  
   return null;
 }
 
@@ -584,28 +613,142 @@ async function scrapeMangaInfo(url: string, source: string, supabase: any) {
   if (!config) throw new Error(`Unknown source: ${source}. Please add it in Sources Manager first.`);
 
   const html = await fetchHTML(url, config);
+  
+  // Debug: Log HTML length and sample
+  console.log(`[Manga Info] HTML received: ${html.length} bytes`);
+  console.log(`[Manga Info] HTML sample: ${html.substring(0, 500)}`);
+  
   const doc = new DOMParser().parseFromString(html, 'text/html');
   if (!doc) throw new Error('Failed to parse HTML');
 
-  const title = smartSelect(doc, config.selectors.title, 'text') || '';
-  let cover = smartSelect(doc, config.selectors.cover, 'attr', 'src') || '';
+  // Enhanced title extraction with multiple fallbacks
+  let title = smartSelect(doc, config.selectors.title || [], 'text') || '';
+  
+  // Fallback title extraction
+  if (!title || title.length < 2) {
+    console.log('[Manga Info] Title not found, trying fallbacks...');
+    
+    // Try meta og:title
+    const ogTitle = doc.querySelector('meta[property="og:title"]');
+    if (ogTitle) {
+      title = ogTitle.getAttribute('content') || '';
+      console.log(`[Manga Info] Found og:title: ${title}`);
+    }
+    
+    // Try document title
+    if (!title || title.length < 2) {
+      const docTitle = doc.querySelector('title');
+      if (docTitle) {
+        title = docTitle.textContent?.split('|')[0]?.split('-')[0]?.trim() || '';
+        console.log(`[Manga Info] Found document title: ${title}`);
+      }
+    }
+    
+    // Try h1, h2
+    if (!title || title.length < 2) {
+      for (const tag of ['h1', 'h2']) {
+        const el = doc.querySelector(tag);
+        if (el) {
+          const text = el.textContent?.trim();
+          if (text && text.length > 2 && text.length < 200) {
+            title = text;
+            console.log(`[Manga Info] Found ${tag}: ${title}`);
+            break;
+          }
+        }
+      }
+    }
+  }
+  
+  // Enhanced cover extraction
+  let cover = smartSelect(doc, config.selectors.cover || [], 'attr', 'src') || '';
+  
+  // Fallback cover extraction
+  if (!cover) {
+    console.log('[Manga Info] Cover not found, trying fallbacks...');
+    
+    // Try og:image
+    const ogImage = doc.querySelector('meta[property="og:image"]');
+    if (ogImage) {
+      cover = ogImage.getAttribute('content') || '';
+      console.log(`[Manga Info] Found og:image: ${cover}`);
+    }
+    
+    // Try common cover selectors
+    if (!cover) {
+      const coverSelectors = [
+        'img.wp-post-image', '.thumb img', '.cover img', 
+        '.summary_image img', 'img[itemprop="image"]',
+        '.post-thumbnail img', '.series-thumb img'
+      ];
+      for (const sel of coverSelectors) {
+        const el = doc.querySelector(sel);
+        if (el) {
+          cover = el.getAttribute('src') || el.getAttribute('data-src') || 
+                  el.getAttribute('data-lazy-src') || el.getAttribute('data-original') || '';
+          if (cover) {
+            console.log(`[Manga Info] Found cover with: ${sel}`);
+            break;
+          }
+        }
+      }
+    }
+  }
+  
   if (cover && !cover.startsWith('http')) {
     cover = cover.startsWith('//') ? 'https:' + cover : config.baseUrl + cover;
   }
   cover = cleanUrl(cover);
   
-  // Try multiple selectors for description
+  // Enhanced description extraction
   let description = '';
-  for (const selector of config.selectors.description) {
-    description = smartSelect(doc, selector, 'text') || '';
-    if (description && description.length > 20) break;
+  const descSelectors = config.selectors.description || [];
+  for (const selector of (Array.isArray(descSelectors) ? descSelectors : [descSelectors])) {
+    const el = doc.querySelector(selector);
+    if (el) {
+      description = el.textContent?.trim() || '';
+      if (description && description.length > 20) {
+        console.log(`[Manga Info] Found description with: ${selector}`);
+        break;
+      }
+    }
   }
   
-  // Additional fallback for description
+  // Fallback description
   if (!description || description.length < 20) {
-    const descEl = doc.querySelector('.summary__content, .description, .manga-excerpt, [itemprop="description"]');
-    if (descEl) {
-      description = descEl.textContent?.trim() || '';
+    // Try meta description
+    const metaDesc = doc.querySelector('meta[name="description"]');
+    if (metaDesc) {
+      description = metaDesc.getAttribute('content') || '';
+      console.log(`[Manga Info] Found meta description`);
+    }
+    
+    // Try og:description
+    if (!description || description.length < 20) {
+      const ogDesc = doc.querySelector('meta[property="og:description"]');
+      if (ogDesc) {
+        description = ogDesc.getAttribute('content') || '';
+        console.log(`[Manga Info] Found og:description`);
+      }
+    }
+    
+    // Try common description selectors
+    if (!description || description.length < 20) {
+      const descFallbacks = [
+        '.summary__content', '.description', '.manga-excerpt', 
+        '[itemprop="description"]', '.entry-content', '.synopsis'
+      ];
+      for (const sel of descFallbacks) {
+        const el = doc.querySelector(sel);
+        if (el) {
+          const text = el.textContent?.trim();
+          if (text && text.length > 20) {
+            description = text;
+            console.log(`[Manga Info] Found description fallback with: ${sel}`);
+            break;
+          }
+        }
+      }
     }
   }
   
@@ -615,9 +758,9 @@ async function scrapeMangaInfo(url: string, source: string, supabase: any) {
   
   console.log(`[Manga Info] Description extracted: ${description.substring(0, 100)}...`);
   
-  const statusRaw = smartSelect(doc, config.selectors.status, 'text') || 'ongoing';
-  const author = smartSelect(doc, config.selectors.author, 'text') || 'غير معروف';
-  const artist = smartSelect(doc, config.selectors.artist, 'text') || '';
+  const statusRaw = smartSelect(doc, config.selectors.status || [], 'text') || 'ongoing';
+  const author = smartSelect(doc, config.selectors.author || [], 'text') || 'غير معروف';
+  const artist = smartSelect(doc, config.selectors.artist || [], 'text') || '';
   
   // Try to extract rating
   let rating = 0;
@@ -641,7 +784,7 @@ async function scrapeMangaInfo(url: string, source: string, supabase: any) {
     }
   }
 
-  const genres = smartExtractGenres(doc, config.selectors.genres);
+  const genres = smartExtractGenres(doc, config.selectors.genres || []);
   const slug = extractSlug(url);
   
   // Download and upload cover image to storage
@@ -656,7 +799,7 @@ async function scrapeMangaInfo(url: string, source: string, supabase: any) {
   }
 
   const mangaData = {
-    title,
+    title: title || 'بدون عنوان',
     slug,
     description,
     cover_url: uploadedCoverUrl,
@@ -670,7 +813,12 @@ async function scrapeMangaInfo(url: string, source: string, supabase: any) {
     source,
   };
 
-  console.log(`[Manga Info] Success:`, { title, genres: genres.length, cover: !!uploadedCoverUrl });
+  console.log(`[Manga Info] ✅ Success:`, { 
+    title: mangaData.title, 
+    genres: genres.length, 
+    cover: !!uploadedCoverUrl,
+    description: description.substring(0, 50)
+  });
   return mangaData;
 }
 
