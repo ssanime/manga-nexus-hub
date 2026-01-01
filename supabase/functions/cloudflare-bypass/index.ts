@@ -31,9 +31,15 @@ function getRandomDelay(min: number, max: number): number {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
-// Check if HTML contains Cloudflare challenge
+// Check if HTML contains Cloudflare challenge - STRICT detection
 function isCloudflareChallenge(html: string, status: number): boolean {
   const lowerHtml = html.toLowerCase();
+  
+  // CRITICAL: Check for "Just a moment" - this is THE indicator of Cloudflare challenge
+  if (lowerHtml.includes('just a moment') || lowerHtml.includes('checking your browser')) {
+    console.log('[Bypass] ⚠️ Detected "Just a moment" challenge page');
+    return true;
+  }
   
   const strongIndicators = [
     'checking your browser',
@@ -44,9 +50,20 @@ function isCloudflareChallenge(html: string, status: number): boolean {
     '__cf_chl_jschl_tk__',
     'cf-challenge-running',
     'enable javascript and cookies to continue',
+    'please wait while we check your browser',
+    'verifying you are human',
+    'ddos protection by',
+    'attention required',
+    'one more step',
   ];
   
   const indicatorCount = strongIndicators.filter(p => lowerHtml.includes(p)).length;
+  
+  // Also check for very short responses which indicate blocked content
+  if (html.length < 5000 && (lowerHtml.includes('cloudflare') || lowerHtml.includes('cf-'))) {
+    console.log('[Bypass] ⚠️ Short Cloudflare response detected');
+    return true;
+  }
   
   return (
     indicatorCount >= 1 ||
@@ -113,7 +130,7 @@ function buildStealthHeaders(userAgent: string, referer?: string, cookieStr?: st
   return headers;
 }
 
-// FlareSolverr API integration
+// FlareSolverr API integration - ENHANCED with better validation
 async function useFlareSolverr(url: string): Promise<{ success: boolean; html?: string; error?: string }> {
   const flareSolverrUrl = Deno.env.get('FLARESOLVERR_URL');
   
@@ -133,17 +150,30 @@ async function useFlareSolverr(url: string): Promise<{ success: boolean; html?: 
       body: JSON.stringify({
         cmd: 'request.get',
         url: url,
-        maxTimeout: 60000,
+        maxTimeout: 120000, // Increased to 2 minutes for heavy Cloudflare
+        session: 'manga-scraper',
+        session_ttl_minutes: 30,
       }),
     });
 
     const result = await response.json();
     
     if (result.status === 'ok' && result.solution?.response) {
-      console.log(`[Bypass] FlareSolverr success: ${result.solution.response.length} bytes`);
+      const html = result.solution.response;
+      
+      // CRITICAL: Validate that we got real content, not Cloudflare page
+      if (isCloudflareChallenge(html, 200)) {
+        console.log(`[Bypass] ❌ FlareSolverr returned Cloudflare page, not real content`);
+        return {
+          success: false,
+          error: 'FlareSolverr returned Cloudflare challenge page',
+        };
+      }
+      
+      console.log(`[Bypass] ✓ FlareSolverr success: ${html.length} bytes`);
       return {
         success: true,
-        html: result.solution.response,
+        html: html,
       };
     } else {
       console.log(`[Bypass] FlareSolverr failed: ${result.message || 'Unknown error'}`);
@@ -181,18 +211,30 @@ async function useCloudProxy(url: string): Promise<{ success: boolean; html?: st
       body: JSON.stringify({
         cmd: 'request.get',
         url: url,
-        maxTimeout: 60000,
+        maxTimeout: 120000,
         userAgent: USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)],
+        session: 'manga-scraper',
       }),
     });
 
     const result = await response.json();
     
     if (result.status === 'ok' && result.solution?.response) {
-      console.log(`[Bypass] CloudProxy success: ${result.solution.response.length} bytes`);
+      const html = result.solution.response;
+      
+      // CRITICAL: Validate content
+      if (isCloudflareChallenge(html, 200)) {
+        console.log(`[Bypass] ❌ CloudProxy returned Cloudflare page`);
+        return {
+          success: false,
+          error: 'CloudProxy returned Cloudflare challenge page',
+        };
+      }
+      
+      console.log(`[Bypass] ✓ CloudProxy success: ${html.length} bytes`);
       return {
         success: true,
-        html: result.solution.response,
+        html: html,
       };
     } else {
       console.log(`[Bypass] CloudProxy failed: ${result.message || 'Unknown error'}`);
@@ -207,6 +249,43 @@ async function useCloudProxy(url: string): Promise<{ success: boolean; html?: st
       success: false,
       error: e?.message || 'CloudProxy exception',
     };
+  }
+}
+
+// NEW: ScrapingBee/ScraperAPI style bypass (for future use)
+async function useScrapingService(url: string): Promise<{ success: boolean; html?: string; error?: string }> {
+  // This can be configured with SCRAPING_API_KEY in the future
+  const apiKey = Deno.env.get('SCRAPING_API_KEY');
+  const apiUrl = Deno.env.get('SCRAPING_API_URL');
+  
+  if (!apiKey || !apiUrl) {
+    return { success: false, error: 'Scraping API not configured' };
+  }
+  
+  console.log(`[Bypass] Using Scraping API`);
+  
+  try {
+    const response = await fetch(`${apiUrl}?api_key=${apiKey}&url=${encodeURIComponent(url)}&render_js=true&premium_proxy=true`, {
+      method: 'GET',
+      headers: {
+        'Accept': 'text/html',
+      },
+    });
+    
+    if (response.ok) {
+      const html = await response.text();
+      
+      if (isCloudflareChallenge(html, 200)) {
+        return { success: false, error: 'Scraping API returned Cloudflare page' };
+      }
+      
+      console.log(`[Bypass] ✓ Scraping API success: ${html.length} bytes`);
+      return { success: true, html };
+    }
+    
+    return { success: false, error: `HTTP ${response.status}` };
+  } catch (e: any) {
+    return { success: false, error: e?.message };
   }
 }
 

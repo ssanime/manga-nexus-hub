@@ -618,6 +618,31 @@ async function scrapeMangaInfo(url: string, source: string, supabase: any) {
   console.log(`[Manga Info] HTML received: ${html.length} bytes`);
   console.log(`[Manga Info] HTML sample: ${html.substring(0, 500)}`);
   
+  // CRITICAL: Check if we got Cloudflare page instead of real content
+  const lowerHtml = html.toLowerCase();
+  const cloudflareIndicators = [
+    'just a moment',
+    'checking your browser',
+    'cf-browser-verification',
+    'please wait while we',
+    'ddos protection',
+    'attention required',
+  ];
+  
+  const isCloudfarePage = cloudflareIndicators.some(ind => lowerHtml.includes(ind));
+  
+  if (isCloudfarePage) {
+    console.error('[Manga Info] ❌ CRITICAL: Received Cloudflare challenge page instead of manga content!');
+    console.error('[Manga Info] HTML snippet:', html.substring(0, 1000));
+    throw new Error('CLOUDFLARE_CHALLENGE: تم حظر الطلب بواسطة Cloudflare. يرجى التأكد من إعداد FlareSolverr أو CloudProxy بشكل صحيح.');
+  }
+  
+  // Also check for very short responses
+  if (html.length < 3000) {
+    console.error('[Manga Info] ❌ Response too short, likely blocked:', html.length, 'bytes');
+    throw new Error('BLOCKED_RESPONSE: الرد قصير جداً، ربما تم حظر الطلب.');
+  }
+  
   const doc = new DOMParser().parseFromString(html, 'text/html');
   if (!doc) throw new Error('Failed to parse HTML');
 
