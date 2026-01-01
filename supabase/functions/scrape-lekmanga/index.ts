@@ -244,7 +244,7 @@ async function loadScraperConfig(supabase: any, sourceName: string) {
         catalogMangaCover: [".item-thumb img", "img.wp-post-image", "img"]
       }
     },
-    // NEW: Lavatoons.com - Madara WordPress Theme
+    // NEW: Lavatoons.com - Madara WordPress Theme with eplister chapters
     "lavatoons": {
       baseUrl: "https://lavatoons.com",
       selectors: {
@@ -257,13 +257,13 @@ async function loadScraperConfig(supabase: any, sourceName: string) {
         author: [".author-content a", ".author-content", "a[href*='manga-author']"],
         artist: [".artist-content a", ".artist-content", "a[href*='manga-artist']"],
         rating: [".score", ".post-total-rating .score", "[property='ratingValue']", "#averagerate"],
-        // قائمة الفصول - Madara
-        chapters: ["li.wp-manga-chapter", "ul.main.version-chap li", ".listing-chapters_wrap li", ".version-chap li"],
-        chapterTitle: ["a", ".chapter-manhwa-title"],
+        // قائمة الفصول - eplister style (lavatoons specific)
+        chapters: ["#chapterlist ul li[data-num]", ".eplister ul li[data-num]", ".eplister ul li", "li.wp-manga-chapter", "ul.main.version-chap li"],
+        chapterTitle: ["span.chapternum", ".chapternum", "a", ".chapter-manhwa-title"],
         chapterUrl: ["a"],
-        chapterDate: [".chapter-release-date i", ".chapter-release-date", "span.chapter-release-date"],
+        chapterDate: ["span.chapterdate", ".chapterdate", ".chapter-release-date i", ".chapter-release-date"],
         // صور الفصل - Madara Reader
-        pageImages: [".reading-content img", ".page-break img", "img.wp-manga-chapter-img", "#image-container img", ".entry-content img"],
+        pageImages: [".reading-content img", ".page-break img", "img.wp-manga-chapter-img", "#image-container img", ".entry-content img", "#readerarea img"],
         year: [".post-content_item:contains('السنة') .summary-content", ".release-year"],
         // الكتالوج
         catalogMangaCard: [".page-item-detail", ".manga-item", ".c-tabs-item__content", "article.post"],
@@ -989,6 +989,108 @@ async function scrapeChapters(mangaUrl: string, source: string, supabase: any) {
     chapters.sort((a, b) => a.chapter_number - b.chapter_number);
     console.log(`[Chapters] Success: ${chapters.length} chapters for olympustaff`);
     return chapters;
+  }
+  
+  // Special handling for lavatoons - eplister chapters with data-num
+  if (sourceLower === 'lavatoons' || sourceLower === 'lavatoons.com') {
+    console.log(`[Chapters] Using lavatoons eplister chapter extraction method`);
+    
+    // Try eplister selectors - lavatoons uses li[data-num] structure
+    const eplisterSelectors = [
+      '#chapterlist ul li[data-num]',
+      '.eplister ul li[data-num]',
+      'div.eplister ul li',
+      '#chapterlist li'
+    ];
+    
+    for (const selector of eplisterSelectors) {
+      const chapterElements = doc.querySelectorAll(selector);
+      if (chapterElements.length > 0) {
+        console.log(`[Chapters] Found ${chapterElements.length} chapters with: ${selector}`);
+        
+        for (let i = 0; i < chapterElements.length; i++) {
+          const chapterEl = chapterElements[i] as any;
+          try {
+            // Get chapter number from data-num attribute
+            const dataNum = chapterEl.getAttribute('data-num');
+            let chapterNumber = dataNum ? parseFloat(dataNum) : 0;
+            
+            // Get URL from anchor tag
+            const linkEl = chapterEl.querySelector('a');
+            let chapterUrl = linkEl?.getAttribute('href') || '';
+            
+            if (!chapterUrl) {
+              console.log(`[Chapters] ⚠️ No URL for chapter ${dataNum}`);
+              continue;
+            }
+            
+            // Get title from span.chapternum
+            let title = '';
+            const chapterNumEl = chapterEl.querySelector('span.chapternum, .chapternum');
+            if (chapterNumEl) {
+              title = chapterNumEl.textContent?.trim().replace(/\s+/g, ' ') || '';
+            }
+            
+            // Extract chapter number from title if not in data-num
+            if (chapterNumber === 0 && title) {
+              const numMatch = title.match(/(\d+\.?\d*)/);
+              if (numMatch) {
+                chapterNumber = parseFloat(numMatch[1]);
+              }
+            }
+            
+            // Fallback: extract from URL
+            if (chapterNumber === 0) {
+              const urlMatch = chapterUrl.match(/chapter[_-]?(\d+\.?\d*)/i);
+              if (urlMatch) {
+                chapterNumber = parseFloat(urlMatch[1]);
+              }
+            }
+            
+            // Get date from span.chapterdate
+            let dateText = '';
+            const dateEl = chapterEl.querySelector('span.chapterdate, .chapterdate');
+            if (dateEl) {
+              dateText = dateEl.textContent?.trim() || '';
+            }
+            
+            const releaseDate = parseArabicDate(dateText);
+            
+            // Normalize URL
+            if (!chapterUrl.startsWith('http')) {
+              if (chapterUrl.startsWith('//')) {
+                chapterUrl = 'https:' + chapterUrl;
+              } else if (chapterUrl.startsWith('/')) {
+                chapterUrl = config.baseUrl + chapterUrl;
+              } else {
+                chapterUrl = config.baseUrl + '/' + chapterUrl;
+              }
+            }
+            
+            chapters.push({
+              chapter_number: chapterNumber || (chapterElements.length - i),
+              title: title || `الفصل ${chapterNumber}`,
+              source_url: chapterUrl,
+              release_date: releaseDate,
+            });
+            
+            console.log(`[Chapters] ✓ Chapter ${chapterNumber}: ${title?.substring(0, 30) || 'N/A'}`);
+          } catch (e: any) {
+            console.error(`[Chapters] Error processing lavatoons chapter ${i + 1}:`, e?.message || e);
+          }
+        }
+        
+        break; // Found chapters
+      }
+    }
+    
+    if (chapters.length > 0) {
+      chapters.sort((a, b) => a.chapter_number - b.chapter_number);
+      console.log(`[Chapters] Success: ${chapters.length} chapters for lavatoons`);
+      return chapters;
+    }
+    
+    console.log(`[Chapters] ⚠️ No eplister chapters found, trying standard selectors...`);
   }
   
   // Try each chapter selector for other sources
