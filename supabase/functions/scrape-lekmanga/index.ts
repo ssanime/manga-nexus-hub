@@ -203,7 +203,6 @@ async function loadScraperConfig(supabase: any, sourceName: string) {
     "olympustaff": {
       baseUrl: "https://olympustaff.com",
       selectors: {
-        // معلومات المانجا الأساسية
         title: [".author-info-title h1", ".series-title", "h1.text-white", "h1", ".manga-title"],
         cover: [".whitebox img.shadow-sm", ".series-thumb img", ".text-right img", "img[alt*='Manga']", ".cover img", "img.img-fluid"],
         description: [".review-author-info", ".series-synops", ".description p", ".manga-description", ".summary p"],
@@ -212,15 +211,12 @@ async function loadScraperConfig(supabase: any, sourceName: string) {
         author: [".full-list-info small a[href*='author']", ".author a", ".author"],
         artist: [".full-list-info small a[href*='artist']", ".artist a", ".artist"],
         rating: [".rating-avg-line", ".rating", ".score"],
-        // قائمة الفصول
         chapters: ["#chaptersContainer .chapter-card", ".enhanced-chapters-grid .chapter-card", ".chapter-card", ".last-chapter .box"],
         chapterTitle: [".chapter-title", ".chapter-number", ".chapter-info .chapter-number", "a"],
         chapterUrl: ["a.chapter-link", ".chapter-link", "a"],
         chapterDate: [".chapter-date span", ".chapter-date", ".date"],
-        // صور الفصل - محدث للعثور على الصور في page-break
         pageImages: [".page-break img", ".page-break.no-gaps img", "img.manga-chapter-img", "#image-0", ".reader-content img", ".chapter-images img"],
         year: [".year", ".release-year"],
-        // الكتالوج
         catalogMangaCard: [".entry-box", ".swiper-slide .entry-box", ".box", ".manga-card", ".series-card"],
         catalogMangaLink: [".entry-image a", ".entry-title a", "a[href*='series']", "a"],
         catalogMangaCover: [".entry-image img", ".best-img", ".imgu img", "img"]
@@ -229,7 +225,6 @@ async function loadScraperConfig(supabase: any, sourceName: string) {
     "3asq": {
       baseUrl: "https://3asq.org",
       selectors: {
-        // معلومات المانجا
         title: [".post-title h1", "h1.entry-title", ".manga-title", "h1"],
         cover: [".summary_image img", ".thumb img", "img.wp-post-image", ".tab-summary img", ".manga-cover img"],
         description: [".manga-excerpt p", ".summary__content p", ".description-summary p", ".entry-content p"],
@@ -238,18 +233,64 @@ async function loadScraperConfig(supabase: any, sourceName: string) {
         author: [".author-content a", ".manga-author a", "a[href*='manga-author']"],
         artist: [".artist-content a", "a[href*='manga-artist']"],
         rating: [".score", ".rating .num", "[itemprop='ratingValue']"],
-        // قائمة الفصول - محدث للعثور على الفصول
         chapters: ["li.wp-manga-chapter", "ul.main li.wp-manga-chapter", ".listing-chapters_wrap li", ".version-chap li"],
         chapterTitle: ["a", ".chapter-name"],
         chapterUrl: ["a"],
         chapterDate: [".chapter-release-date i", ".chapter-release-date .timediff i", "span.chapter-release-date", ".release-date"],
-        // صور الفصل - محدث للعثور على صور الفصل
         pageImages: ["img.wp-manga-chapter-img", ".reading-content img", ".page-break img", "#readerarea img"],
         year: ["a[href*='manga-release']", ".release-year"],
-        // الكتالوج
         catalogMangaCard: [".page-item-detail", ".c-tabs-item__content", ".manga-item", "article.post"],
         catalogMangaLink: [".item-thumb a", ".post-title a", "a[href*='/manga/']", "a"],
         catalogMangaCover: [".item-thumb img", "img.wp-post-image", "img"]
+      }
+    },
+    // NEW: Lavatoons.com - Madara WordPress Theme
+    "lavatoons": {
+      baseUrl: "https://lavatoons.com",
+      selectors: {
+        // معلومات المانجا - Madara Theme
+        title: [".post-title h1", "h1", ".entry-title", ".manga-title"],
+        cover: [".summary_image img", ".summary_image a img", "img.img-responsive", ".tab-summary img", "meta[property='og:image']"],
+        description: [".description-summary .summary__content", ".manga-excerpt", ".summary__content p", ".entry-content p"],
+        status: [".post-content_item:contains('الحالة') .summary-content", ".post-status .summary-content", ".status"],
+        genres: [".genres-content a", ".tags-content a", "a[rel='tag']", ".mgen a"],
+        author: [".author-content a", ".author-content", "a[href*='manga-author']"],
+        artist: [".artist-content a", ".artist-content", "a[href*='manga-artist']"],
+        rating: [".score", ".post-total-rating .score", "[property='ratingValue']", "#averagerate"],
+        // قائمة الفصول - Madara
+        chapters: ["li.wp-manga-chapter", "ul.main.version-chap li", ".listing-chapters_wrap li", ".version-chap li"],
+        chapterTitle: ["a", ".chapter-manhwa-title"],
+        chapterUrl: ["a"],
+        chapterDate: [".chapter-release-date i", ".chapter-release-date", "span.chapter-release-date"],
+        // صور الفصل - Madara Reader
+        pageImages: [".reading-content img", ".page-break img", "img.wp-manga-chapter-img", "#image-container img", ".entry-content img"],
+        year: [".post-content_item:contains('السنة') .summary-content", ".release-year"],
+        // الكتالوج
+        catalogMangaCard: [".page-item-detail", ".manga-item", ".c-tabs-item__content", "article.post"],
+        catalogMangaLink: [".item-thumb a", ".post-title a", "a"],
+        catalogMangaCover: [".item-thumb img", "img", ".summary_image img"]
+      }
+    },
+    // Alternative lavatoons entry for domain variations
+    "lavatoons.com": {
+      baseUrl: "https://lavatoons.com",
+      selectors: {
+        title: [".post-title h1", "h1", ".entry-title", ".manga-title"],
+        cover: [".summary_image img", ".summary_image a img", "img.img-responsive", ".tab-summary img"],
+        description: [".description-summary .summary__content", ".manga-excerpt", ".summary__content p"],
+        status: [".post-content_item:contains('الحالة') .summary-content", ".post-status .summary-content"],
+        genres: [".genres-content a", ".tags-content a", "a[rel='tag']"],
+        author: [".author-content a", ".author-content"],
+        artist: [".artist-content a", ".artist-content"],
+        rating: [".score", ".post-total-rating .score", "[property='ratingValue']"],
+        chapters: ["li.wp-manga-chapter", "ul.main.version-chap li", ".listing-chapters_wrap li"],
+        chapterTitle: ["a"],
+        chapterUrl: ["a"],
+        chapterDate: [".chapter-release-date i", ".chapter-release-date"],
+        pageImages: [".reading-content img", ".page-break img", "img.wp-manga-chapter-img"],
+        catalogMangaCard: [".page-item-detail", ".manga-item"],
+        catalogMangaLink: [".item-thumb a", ".post-title a"],
+        catalogMangaCover: [".item-thumb img", "img"]
       }
     }
   };

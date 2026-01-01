@@ -254,7 +254,6 @@ async function useCloudProxy(url: string): Promise<{ success: boolean; html?: st
 
 // NEW: ScrapingBee/ScraperAPI style bypass (for future use)
 async function useScrapingService(url: string): Promise<{ success: boolean; html?: string; error?: string }> {
-  // This can be configured with SCRAPING_API_KEY in the future
   const apiKey = Deno.env.get('SCRAPING_API_KEY');
   const apiUrl = Deno.env.get('SCRAPING_API_URL');
   
@@ -267,26 +266,210 @@ async function useScrapingService(url: string): Promise<{ success: boolean; html
   try {
     const response = await fetch(`${apiUrl}?api_key=${apiKey}&url=${encodeURIComponent(url)}&render_js=true&premium_proxy=true`, {
       method: 'GET',
-      headers: {
-        'Accept': 'text/html',
-      },
+      headers: { 'Accept': 'text/html' },
     });
     
     if (response.ok) {
       const html = await response.text();
-      
       if (isCloudflareChallenge(html, 200)) {
         return { success: false, error: 'Scraping API returned Cloudflare page' };
       }
-      
       console.log(`[Bypass] ✓ Scraping API success: ${html.length} bytes`);
       return { success: true, html };
     }
-    
     return { success: false, error: `HTTP ${response.status}` };
   } catch (e: any) {
     return { success: false, error: e?.message };
   }
+}
+
+// FREE: WebScrapingAPI bypass using free tier
+async function useWebScrapingAPI(url: string): Promise<{ success: boolean; html?: string; error?: string }> {
+  const apiKey = Deno.env.get('WEBSCRAPING_API_KEY');
+  if (!apiKey) {
+    console.log('[Bypass] WebScrapingAPI not configured');
+    return { success: false, error: 'WebScrapingAPI not configured' };
+  }
+
+  console.log(`[Bypass] Using WebScrapingAPI`);
+  try {
+    const params = new URLSearchParams({
+      api_key: apiKey,
+      url: url,
+      render_js: '1',
+      proxy_type: 'datacenter',
+      timeout: '30000',
+    });
+    
+    const response = await fetch(`https://api.webscrapingapi.com/v1?${params}`, {
+      method: 'GET',
+      headers: { 'Accept': 'text/html' },
+    });
+    
+    if (response.ok) {
+      const html = await response.text();
+      if (!isCloudflareChallenge(html, 200) && hasValidMangaContent(html)) {
+        console.log(`[Bypass] ✓ WebScrapingAPI success: ${html.length} bytes`);
+        return { success: true, html };
+      }
+    }
+    return { success: false, error: `HTTP ${response.status}` };
+  } catch (e: any) {
+    return { success: false, error: e?.message };
+  }
+}
+
+// FREE: ZenRows bypass using free tier (1000 free requests)
+async function useZenRows(url: string): Promise<{ success: boolean; html?: string; error?: string }> {
+  const apiKey = Deno.env.get('ZENROWS_API_KEY');
+  if (!apiKey) {
+    console.log('[Bypass] ZenRows not configured');
+    return { success: false, error: 'ZenRows not configured' };
+  }
+
+  console.log(`[Bypass] Using ZenRows`);
+  try {
+    const params = new URLSearchParams({
+      apikey: apiKey,
+      url: url,
+      js_render: 'true',
+      antibot: 'true',
+      premium_proxy: 'true',
+    });
+    
+    const response = await fetch(`https://api.zenrows.com/v1/?${params}`, {
+      method: 'GET',
+    });
+    
+    if (response.ok) {
+      const html = await response.text();
+      if (!isCloudflareChallenge(html, 200) && hasValidMangaContent(html)) {
+        console.log(`[Bypass] ✓ ZenRows success: ${html.length} bytes`);
+        return { success: true, html };
+      }
+    }
+    return { success: false, error: `HTTP ${response.status}` };
+  } catch (e: any) {
+    return { success: false, error: e?.message };
+  }
+}
+
+// FREE: ScrapingBee free tier (1000 free credits)
+async function useScrapingBee(url: string): Promise<{ success: boolean; html?: string; error?: string }> {
+  const apiKey = Deno.env.get('SCRAPINGBEE_API_KEY');
+  if (!apiKey) {
+    console.log('[Bypass] ScrapingBee not configured');
+    return { success: false, error: 'ScrapingBee not configured' };
+  }
+
+  console.log(`[Bypass] Using ScrapingBee`);
+  try {
+    const params = new URLSearchParams({
+      api_key: apiKey,
+      url: url,
+      render_js: 'true',
+      premium_proxy: 'true',
+      block_ads: 'true',
+      block_resources: 'false',
+    });
+    
+    const response = await fetch(`https://app.scrapingbee.com/api/v1/?${params}`, {
+      method: 'GET',
+    });
+    
+    if (response.ok) {
+      const html = await response.text();
+      if (!isCloudflareChallenge(html, 200) && hasValidMangaContent(html)) {
+        console.log(`[Bypass] ✓ ScrapingBee success: ${html.length} bytes`);
+        return { success: true, html };
+      }
+    }
+    return { success: false, error: `HTTP ${response.status}` };
+  } catch (e: any) {
+    return { success: false, error: e?.message };
+  }
+}
+
+// Enhanced direct fetch with browser simulation and TLS fingerprint evasion
+async function useEnhancedDirectFetch(url: string, retries: number = 3): Promise<{ success: boolean; html?: string; error?: string }> {
+  console.log(`[Bypass] Using enhanced direct fetch with advanced evasion`);
+  
+  let cookies: string[] = [];
+  const domain = new URL(url).origin;
+  
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    const userAgent = getRandomUserAgent();
+    
+    // Enhanced headers with more realistic browser fingerprint
+    const headers: Record<string, string> = {
+      'User-Agent': userAgent,
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+      'Accept-Language': 'ar-SA,ar;q=0.9,en-US;q=0.8,en;q=0.7',
+      'Accept-Encoding': 'gzip, deflate, br',
+      'Connection': 'keep-alive',
+      'Upgrade-Insecure-Requests': '1',
+      'Sec-Fetch-Dest': 'document',
+      'Sec-Fetch-Mode': 'navigate',
+      'Sec-Fetch-Site': attempt > 1 ? 'same-origin' : 'none',
+      'Sec-Fetch-User': '?1',
+      'Cache-Control': 'max-age=0',
+      'DNT': '1',
+      'Pragma': 'no-cache',
+      // Chrome-specific headers
+      'sec-ch-ua': '"Not_A Brand";v="8", "Chromium";v="131", "Google Chrome";v="131"',
+      'sec-ch-ua-mobile': '?0',
+      'sec-ch-ua-platform': '"Windows"',
+      'sec-ch-ua-platform-version': '"15.0.0"',
+      'sec-ch-ua-full-version-list': '"Not_A Brand";v="8.0.0.0", "Chromium";v="131.0.6778.86", "Google Chrome";v="131.0.6778.86"',
+    };
+    
+    if (attempt > 1) {
+      headers['Referer'] = domain;
+    }
+    
+    if (cookies.length > 0) {
+      headers['Cookie'] = cookies.join('; ');
+    }
+    
+    try {
+      // Add human-like delay
+      await new Promise(r => setTimeout(r, getRandomDelay(2000, 5000)));
+      
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000);
+      
+      const response = await fetch(url, {
+        headers,
+        redirect: 'follow',
+        signal: controller.signal,
+      });
+      
+      clearTimeout(timeoutId);
+      
+      // Collect cookies
+      const setCookie = response.headers.get('set-cookie');
+      if (setCookie) {
+        const newCookies = setCookie.split(',').map(c => c.split(';')[0].trim());
+        cookies = [...new Set([...cookies, ...newCookies])];
+      }
+      
+      const html = await response.text();
+      
+      if (!isCloudflareChallenge(html, response.status) && hasValidMangaContent(html)) {
+        console.log(`[Bypass] ✓ Enhanced direct fetch success on attempt ${attempt}: ${html.length} bytes`);
+        return { success: true, html };
+      }
+      
+      console.log(`[Bypass] Attempt ${attempt} - CF challenge or invalid content, retrying...`);
+    } catch (e: any) {
+      console.log(`[Bypass] Enhanced fetch attempt ${attempt} failed:`, e?.message);
+    }
+    
+    // Longer delay between retries
+    await new Promise(r => setTimeout(r, getRandomDelay(3000, 7000)));
+  }
+  
+  return { success: false, error: 'All enhanced direct fetch attempts failed' };
 }
 
 serve(async (req) => {
@@ -426,6 +609,50 @@ serve(async (req) => {
           console.error('[Bypass] Firecrawl exception:', lastError);
         }
       }
+    }
+
+    // Strategy 1.5: FREE APIs - ZenRows, ScrapingBee, WebScrapingAPI
+    console.log(`[Bypass] Strategy 1.5: Free scraping APIs`);
+    
+    // Try ZenRows (1000 free credits)
+    const zenRowsResult = await useZenRows(url);
+    if (zenRowsResult.success && zenRowsResult.html) {
+      console.log(`[Bypass] ✓ ZenRows success!`);
+      return new Response(
+        JSON.stringify({ success: true, html: zenRowsResult.html, status: 200, method: 'zenrows' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    
+    // Try ScrapingBee (1000 free credits)
+    const scrapingBeeResult = await useScrapingBee(url);
+    if (scrapingBeeResult.success && scrapingBeeResult.html) {
+      console.log(`[Bypass] ✓ ScrapingBee success!`);
+      return new Response(
+        JSON.stringify({ success: true, html: scrapingBeeResult.html, status: 200, method: 'scrapingbee' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    
+    // Try WebScrapingAPI
+    const webScrapingResult = await useWebScrapingAPI(url);
+    if (webScrapingResult.success && webScrapingResult.html) {
+      console.log(`[Bypass] ✓ WebScrapingAPI success!`);
+      return new Response(
+        JSON.stringify({ success: true, html: webScrapingResult.html, status: 200, method: 'webscrapingapi' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Strategy 1.7: Enhanced Direct Fetch with advanced browser simulation
+    console.log(`[Bypass] Strategy 1.7: Enhanced direct fetch`);
+    const enhancedResult = await useEnhancedDirectFetch(url, 3);
+    if (enhancedResult.success && enhancedResult.html) {
+      console.log(`[Bypass] ✓ Enhanced direct fetch success!`);
+      return new Response(
+        JSON.stringify({ success: true, html: enhancedResult.html, status: 200, method: 'enhanced_direct' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
     // Strategy 2: Direct fetch with stealth headers
