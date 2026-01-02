@@ -1341,98 +1341,154 @@ async function scrapeChapterPages(chapterUrl: string, source: string, supabase: 
 
   const pages: any[] = [];
   
-  // Try all image selectors and collect ALL images
-  let allImages: any[] = [];
+  // Collect ALL images from the chapter
   let extractedUrls: string[] = [];
 
+  // Method 1: Try DOM selectors
   for (const imageSelector of config.selectors.pageImages) {
-    const imageElements = doc.querySelectorAll(imageSelector);
-    if (imageElements.length > 0) {
-      console.log(`[Pages] Found ${imageElements.length} images with: ${imageSelector}`);
-      allImages = Array.from(imageElements);
-      break; // Use first selector that finds images
+    try {
+      const imageElements = doc.querySelectorAll(imageSelector);
+      if (imageElements.length > 0) {
+        console.log(`[Pages] Found ${imageElements.length} images with selector: ${imageSelector}`);
+        
+        // Extract URLs from all image elements
+        for (let i = 0; i < imageElements.length; i++) {
+          const img = imageElements[i] as any;
+          const imgUrl = img.getAttribute('src') || 
+                         img.getAttribute('data-src') || 
+                         img.getAttribute('data-lazy-src') ||
+                         img.getAttribute('data-original') || '';
+          
+          if (imgUrl && !imgUrl.includes('data:image') && !imgUrl.includes('placeholder')) {
+            const cleanedUrl = cleanUrl(imgUrl);
+            if (cleanedUrl && !extractedUrls.includes(cleanedUrl)) {
+              extractedUrls.push(cleanedUrl);
+            }
+          }
+        }
+        
+        if (extractedUrls.length > 0) {
+          console.log(`[Pages] Extracted ${extractedUrls.length} unique image URLs from DOM`);
+          break; // Use first successful selector
+        }
+      }
+    } catch (err: any) {
+      console.log(`[Pages] Error with selector ${imageSelector}:`, err?.message);
     }
   }
 
-  // Lavatoons fallback: sometimes images are present in HTML but DOM parsing/selectors miss them
-  if (allImages.length === 0 && isLavatoons) {
-    const hasReaderArea = html.toLowerCase().includes('readerarea');
-    console.log(`[Pages] Lavatoons debug: html has readerarea=${hasReaderArea}`);
-
-    const matches = html.match(
-      /https?:\/\/lavatoons\.com\/wp-content\/uploads\/manga\/[^"'\s>]+?\.(?:jpg|jpeg|png|webp)(?:\?[^"'\s>]*)?/gi,
-    ) || [];
-
-    extractedUrls = Array.from(new Set(matches.map((u) => cleanUrl(u))));
-    extractedUrls.sort((a, b) => {
-      const na = Number(a.match(/\/(\d+)\.(?:jpg|jpeg|png|webp)(?:\?|$)/i)?.[1] || 0);
-      const nb = Number(b.match(/\/(\d+)\.(?:jpg|jpeg|png|webp)(?:\?|$)/i)?.[1] || 0);
-      return na - nb;
-    });
-
-    if (extractedUrls.length > 0) {
-      console.log(`[Pages] Extracted ${extractedUrls.length} image URLs via regex fallback`);
-    }
-  }
-
-  const totalImages = allImages.length > 0 ? allImages.length : extractedUrls.length;
-
-  if (totalImages === 0) {
-    console.warn('[Pages] No images found with any selector');
-    return pages;
-  }
-  
-  console.log(`[Pages] Processing ${totalImages} images sequentially...`);
-  
-  // Process images ONE BY ONE to prevent memory exhaustion
-  const MAX_PAGES = 60; // Limit to prevent timeout
-  const imagesToProcess = Math.min(totalImages, MAX_PAGES);
-  
-  for (let index = 0; index < imagesToProcess; index++) {
-    let imageUrl = '';
-
-    if (allImages.length > 0) {
-      const img = allImages[index] as any;
-      imageUrl = img.getAttribute('src') || 
-                 img.getAttribute('data-src') || 
-                 img.getAttribute('data-lazy-src') ||
-                 img.getAttribute('data-original') || '';
-    } else {
-      imageUrl = extractedUrls[index] || '';
-    }
-
-    if (imageUrl) {
-      imageUrl = cleanUrl(imageUrl);
-      
-      if (!imageUrl.startsWith('http')) {
-        if (imageUrl.startsWith('//')) {
-          imageUrl = 'https:' + imageUrl;
-        } else if (imageUrl.startsWith('/')) {
-          imageUrl = config.baseUrl + imageUrl;
-        } else {
-          imageUrl = config.baseUrl + '/' + imageUrl;
+  // Method 2: Regex fallback for lavatoons and other sites
+  if (extractedUrls.length === 0) {
+    console.log(`[Pages] DOM selectors failed, trying regex extraction...`);
+    
+    // Multiple regex patterns for different sites
+    const regexPatterns = [
+      // Lavatoons specific pattern
+      /https?:\/\/lavatoons\.com\/wp-content\/uploads\/manga\/[^"'\s<>]+?\.(?:jpg|jpeg|png|webp|gif)(?:\?[^"'\s<>]*)?/gi,
+      // Generic WordPress manga patterns
+      /https?:\/\/[^"'\s<>]+\/wp-content\/uploads\/[^"'\s<>]+?\.(?:jpg|jpeg|png|webp|gif)(?:\?[^"'\s<>]*)?/gi,
+      // Generic manga image patterns
+      /https?:\/\/[^"'\s<>]+\/manga\/[^"'\s<>]+?\.(?:jpg|jpeg|png|webp|gif)(?:\?[^"'\s<>]*)?/gi,
+      // Reader area images
+      /<img[^>]+class="[^"]*ts-main-image[^"]*"[^>]+src="([^"]+)"/gi,
+    ];
+    
+    for (const pattern of regexPatterns) {
+      const matches = html.matchAll(pattern);
+      for (const match of matches) {
+        // Handle both full match and capture groups
+        const url = match[1] || match[0];
+        if (url) {
+          const cleanedUrl = cleanUrl(url);
+          if (cleanedUrl && 
+              !cleanedUrl.includes('data:image') && 
+              !cleanedUrl.includes('placeholder') &&
+              !cleanedUrl.includes('logo') &&
+              !cleanedUrl.includes('icon') &&
+              !extractedUrls.includes(cleanedUrl)) {
+            extractedUrls.push(cleanedUrl);
+          }
         }
       }
       
-      console.log(`[Pages] ${index + 1}/${imagesToProcess}: ${imageUrl.substring(0, 50)}...`);
-      
-      const fileName = `${chapterId}/page-${index + 1}.jpg`;
-      const uploadedUrl = await downloadAndUploadImage(imageUrl, supabase, 'chapter-pages', fileName, chapterUrl);
-      
-      if (uploadedUrl) {
-        pages.push({
-          page_number: index + 1,
-          image_url: uploadedUrl,
-        });
+      if (extractedUrls.length > 0) {
+        console.log(`[Pages] Regex extracted ${extractedUrls.length} image URLs`);
+        break;
       }
     }
   }
-  
-  if (totalImages > MAX_PAGES) {
-    console.log(`[Pages] ⚠️ Limited to ${MAX_PAGES}/${totalImages} pages`);
+
+  // Method 3: Look for ts_reader_control.pages array in script
+  if (extractedUrls.length === 0 || isLavatoons) {
+    const scriptMatch = html.match(/ts_reader_control\s*\.\s*pages\s*=\s*\[([^\]]+)\]/i);
+    if (scriptMatch) {
+      const urlMatches = scriptMatch[1].matchAll(/"([^"]+)"/g);
+      for (const m of urlMatches) {
+        const url = cleanUrl(m[1]);
+        if (url && url.includes('http') && !extractedUrls.includes(url)) {
+          extractedUrls.push(url);
+        }
+      }
+      console.log(`[Pages] Found ${extractedUrls.length} images from ts_reader_control.pages`);
+    }
   }
 
-  console.log(`[Pages] Success: ${pages.length} pages`);
+  // Sort images by page number if possible
+  extractedUrls.sort((a, b) => {
+    const numA = parseInt(a.match(/\/(\d+)\.(?:jpg|jpeg|png|webp|gif)/i)?.[1] || '0');
+    const numB = parseInt(b.match(/\/(\d+)\.(?:jpg|jpeg|png|webp|gif)/i)?.[1] || '0');
+    return numA - numB;
+  });
+
+  console.log(`[Pages] Total unique images to process: ${extractedUrls.length}`);
+
+  if (extractedUrls.length === 0) {
+    console.warn('[Pages] No images found with any method');
+    // Log a sample of HTML for debugging
+    console.log(`[Pages] HTML sample: ${html.substring(0, 500)}`);
+    return pages;
+  }
+  
+  // Process images sequentially to prevent memory issues
+  const MAX_PAGES = 80; // Increased limit
+  const imagesToProcess = Math.min(extractedUrls.length, MAX_PAGES);
+  
+  console.log(`[Pages] Processing ${imagesToProcess} images...`);
+  
+  for (let index = 0; index < imagesToProcess; index++) {
+    let imageUrl = extractedUrls[index];
+    
+    if (!imageUrl) continue;
+    
+    // Normalize URL
+    if (!imageUrl.startsWith('http')) {
+      if (imageUrl.startsWith('//')) {
+        imageUrl = 'https:' + imageUrl;
+      } else if (imageUrl.startsWith('/')) {
+        imageUrl = config.baseUrl + imageUrl;
+      } else {
+        imageUrl = config.baseUrl + '/' + imageUrl;
+      }
+    }
+    
+    console.log(`[Pages] ${index + 1}/${imagesToProcess}: ${imageUrl.substring(0, 60)}...`);
+    
+    const fileName = `${chapterId}/page-${index + 1}.jpg`;
+    const uploadedUrl = await downloadAndUploadImage(imageUrl, supabase, 'chapter-pages', fileName, chapterUrl);
+    
+    if (uploadedUrl) {
+      pages.push({
+        page_number: index + 1,
+        image_url: uploadedUrl,
+      });
+    }
+  }
+  
+  if (extractedUrls.length > MAX_PAGES) {
+    console.log(`[Pages] ⚠️ Limited to ${MAX_PAGES}/${extractedUrls.length} pages`);
+  }
+
+  console.log(`[Pages] ✅ Success: ${pages.length} pages uploaded`);
   return pages;
 }
 
