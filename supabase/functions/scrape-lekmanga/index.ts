@@ -1253,14 +1253,20 @@ async function scrapeChapters(mangaUrl: string, source: string, supabase: any) {
 }
 
 // Helper function to download and upload image to Supabase Storage - MEMORY OPTIMIZED
-async function downloadAndUploadImage(imageUrl: string, supabase: any, bucket: string, path: string): Promise<string | null> {
+async function downloadAndUploadImage(
+  imageUrl: string,
+  supabase: any,
+  bucket: string,
+  path: string,
+  referer?: string,
+): Promise<string | null> {
   try {
     // Use AbortController for timeout
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout per image
     
     const response = await fetch(imageUrl, {
-      headers: getBrowserHeaders(),
+      headers: getBrowserHeaders(referer),
       signal: controller.signal,
     });
     clearTimeout(timeoutId);
@@ -1316,6 +1322,19 @@ async function scrapeChapterPages(chapterUrl: string, source: string, supabase: 
   const config = await loadScraperConfig(supabase, source);
   if (!config) throw new Error(`Unknown source: ${source}. Please add it in Sources Manager first.`);
 
+  const sourceLower = (source || '').toLowerCase();
+  const isLavatoons = sourceLower.includes('lavatoons') || chapterUrl.includes('lavatoons.com');
+
+  // Ensure selectors shape
+  config.selectors = config.selectors || {};
+  config.selectors.pageImages = Array.isArray(config.selectors.pageImages) ? config.selectors.pageImages : [];
+
+  // lavatoons: dynamic DB config may not include correct reader selectors
+  if (isLavatoons) {
+    const forced = ['#readerarea img.ts-main-image', '#readerarea img', 'img.ts-main-image'];
+    config.selectors.pageImages = Array.from(new Set([...forced, ...config.selectors.pageImages]));
+  }
+
   const html = await fetchHTML(chapterUrl, config);
   const doc = new DOMParser().parseFromString(html, 'text/html');
   if (!doc) throw new Error('Failed to parse HTML');
@@ -1324,7 +1343,8 @@ async function scrapeChapterPages(chapterUrl: string, source: string, supabase: 
   
   // Try all image selectors and collect ALL images
   let allImages: any[] = [];
-  
+  let extractedUrls: string[] = [];
+
   for (const imageSelector of config.selectors.pageImages) {
     const imageElements = doc.querySelectorAll(imageSelector);
     if (imageElements.length > 0) {
@@ -1333,25 +1353,54 @@ async function scrapeChapterPages(chapterUrl: string, source: string, supabase: 
       break; // Use first selector that finds images
     }
   }
-  
-  if (allImages.length === 0) {
+
+  // Lavatoons fallback: sometimes images are present in HTML but DOM parsing/selectors miss them
+  if (allImages.length === 0 && isLavatoons) {
+    const hasReaderArea = html.toLowerCase().includes('readerarea');
+    console.log(`[Pages] Lavatoons debug: html has readerarea=${hasReaderArea}`);
+
+    const matches = html.match(
+      /https?:\/\/lavatoons\.com\/wp-content\/uploads\/manga\/[^"'\s>]+?\.(?:jpg|jpeg|png|webp)(?:\?[^"'\s>]*)?/gi,
+    ) || [];
+
+    extractedUrls = Array.from(new Set(matches.map((u) => cleanUrl(u))));
+    extractedUrls.sort((a, b) => {
+      const na = Number(a.match(/\/(\d+)\.(?:jpg|jpeg|png|webp)(?:\?|$)/i)?.[1] || 0);
+      const nb = Number(b.match(/\/(\d+)\.(?:jpg|jpeg|png|webp)(?:\?|$)/i)?.[1] || 0);
+      return na - nb;
+    });
+
+    if (extractedUrls.length > 0) {
+      console.log(`[Pages] Extracted ${extractedUrls.length} image URLs via regex fallback`);
+    }
+  }
+
+  const totalImages = allImages.length > 0 ? allImages.length : extractedUrls.length;
+
+  if (totalImages === 0) {
     console.warn('[Pages] No images found with any selector');
     return pages;
   }
   
-  console.log(`[Pages] Processing ${allImages.length} images sequentially...`);
+  console.log(`[Pages] Processing ${totalImages} images sequentially...`);
   
   // Process images ONE BY ONE to prevent memory exhaustion
   const MAX_PAGES = 60; // Limit to prevent timeout
-  const imagesToProcess = Math.min(allImages.length, MAX_PAGES);
+  const imagesToProcess = Math.min(totalImages, MAX_PAGES);
   
   for (let index = 0; index < imagesToProcess; index++) {
-    const img = allImages[index] as any;
-    let imageUrl = img.getAttribute('src') || 
-                   img.getAttribute('data-src') || 
-                   img.getAttribute('data-lazy-src') ||
-                   img.getAttribute('data-original') || '';
-    
+    let imageUrl = '';
+
+    if (allImages.length > 0) {
+      const img = allImages[index] as any;
+      imageUrl = img.getAttribute('src') || 
+                 img.getAttribute('data-src') || 
+                 img.getAttribute('data-lazy-src') ||
+                 img.getAttribute('data-original') || '';
+    } else {
+      imageUrl = extractedUrls[index] || '';
+    }
+
     if (imageUrl) {
       imageUrl = cleanUrl(imageUrl);
       
@@ -1368,7 +1417,7 @@ async function scrapeChapterPages(chapterUrl: string, source: string, supabase: 
       console.log(`[Pages] ${index + 1}/${imagesToProcess}: ${imageUrl.substring(0, 50)}...`);
       
       const fileName = `${chapterId}/page-${index + 1}.jpg`;
-      const uploadedUrl = await downloadAndUploadImage(imageUrl, supabase, 'chapter-pages', fileName);
+      const uploadedUrl = await downloadAndUploadImage(imageUrl, supabase, 'chapter-pages', fileName, chapterUrl);
       
       if (uploadedUrl) {
         pages.push({
@@ -1379,8 +1428,8 @@ async function scrapeChapterPages(chapterUrl: string, source: string, supabase: 
     }
   }
   
-  if (allImages.length > MAX_PAGES) {
-    console.log(`[Pages] ⚠️ Limited to ${MAX_PAGES}/${allImages.length} pages`);
+  if (totalImages > MAX_PAGES) {
+    console.log(`[Pages] ⚠️ Limited to ${MAX_PAGES}/${totalImages} pages`);
   }
 
   console.log(`[Pages] Success: ${pages.length} pages`);
