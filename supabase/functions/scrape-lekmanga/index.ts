@@ -262,8 +262,8 @@ async function loadScraperConfig(supabase: any, sourceName: string) {
         chapterTitle: ["span.chapternum", ".chapternum", "a", ".chapter-manhwa-title"],
         chapterUrl: ["a"],
         chapterDate: ["span.chapterdate", ".chapterdate", ".chapter-release-date i", ".chapter-release-date"],
-        // صور الفصل - Madara Reader
-        pageImages: [".reading-content img", ".page-break img", "img.wp-manga-chapter-img", "#image-container img", ".entry-content img", "#readerarea img"],
+        // صور الفصل - ts-main-image class specific to lavatoons reader
+        pageImages: ["#readerarea img.ts-main-image", "#readerarea img", "img.ts-main-image", ".reading-content img", ".page-break img", "img.wp-manga-chapter-img"],
         year: [".post-content_item:contains('السنة') .summary-content", ".release-year"],
         // الكتالوج
         catalogMangaCard: [".page-item-detail", ".manga-item", ".c-tabs-item__content", "article.post"],
@@ -283,11 +283,11 @@ async function loadScraperConfig(supabase: any, sourceName: string) {
         author: [".author-content a", ".author-content"],
         artist: [".artist-content a", ".artist-content"],
         rating: [".score", ".post-total-rating .score", "[property='ratingValue']"],
-        chapters: ["li.wp-manga-chapter", "ul.main.version-chap li", ".listing-chapters_wrap li"],
-        chapterTitle: ["a"],
+        chapters: ["#chapterlist ul li[data-num]", ".eplister ul li[data-num]", "li.wp-manga-chapter"],
+        chapterTitle: ["span.chapternum", ".chapternum", "a"],
         chapterUrl: ["a"],
-        chapterDate: [".chapter-release-date i", ".chapter-release-date"],
-        pageImages: [".reading-content img", ".page-break img", "img.wp-manga-chapter-img"],
+        chapterDate: ["span.chapterdate", ".chapterdate", ".chapter-release-date i"],
+        pageImages: ["#readerarea img.ts-main-image", "#readerarea img", "img.ts-main-image", ".reading-content img", ".page-break img"],
         catalogMangaCard: [".page-item-detail", ".manga-item"],
         catalogMangaLink: [".item-thumb a", ".post-title a"],
         catalogMangaCover: [".item-thumb img", "img"]
