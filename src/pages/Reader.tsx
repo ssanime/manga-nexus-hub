@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ChevronLeft, ChevronRight, Home, List, X, Loader2, Heart, Share2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Home, List, X, Loader2, Heart, Share2, RefreshCw } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/components/ui/use-toast";
@@ -19,6 +19,7 @@ const Reader = () => {
   const [allChapters, setAllChapters] = useState<any[]>([]);
   const [user, setUser] = useState<any>(null);
   const [isFavorite, setIsFavorite] = useState(false);
+  const [rescraping, setRescraping] = useState(false);
 
   useEffect(() => {
     checkUser();
@@ -106,6 +107,58 @@ const Reader = () => {
     }
   };
 
+  const scrapeAndReloadPages = async (mangaData: any, chapterData: any) => {
+    setRescraping(true);
+    toast({
+      title: "جاري التحديث",
+      description: "جاري سحب صفحات الفصل من المصدر...",
+    });
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+
+      const response = await supabase.functions.invoke('scrape-lekmanga', {
+        body: {
+          url: chapterData.source_url,
+          jobType: 'pages',
+          chapterId: chapterData.id,
+          source: mangaData.source,
+        },
+        headers: session ? { Authorization: `Bearer ${session.access_token}` } : {},
+      });
+
+      if (response.error) {
+        console.error('Scraping error:', response.error);
+        throw response.error;
+      }
+
+      const { data: newPagesData, error: reloadError } = await supabase
+        .from('chapter_pages')
+        .select('*')
+        .eq('chapter_id', chapterData.id)
+        .order('page_number', { ascending: true });
+
+      if (reloadError) throw reloadError;
+
+      const urls = newPagesData?.map((p) => p.image_url) || [];
+      setPages(urls);
+
+      toast({
+        title: "تم بنجاح",
+        description: `تم تحميل ${urls.length} صفحة`,
+      });
+    } catch (err) {
+      console.error('Failed to scrape pages:', err);
+      toast({
+        title: "خطأ",
+        description: "فشل سحب صفحات الفصل. حاول مرة أخرى لاحقاً",
+        variant: "destructive",
+      });
+    } finally {
+      setRescraping(false);
+    }
+  };
+
   useEffect(() => {
     loadChapterData();
   }, [mangaId, chapterId]);
@@ -181,54 +234,8 @@ const Reader = () => {
           variant: "destructive",
         });
       } else if (!pagesData || pagesData.length === 0) {
-        // No pages found - scrape them on-demand
         console.log('No pages found, scraping from source...');
-        toast({
-          title: "جاري التحميل",
-          description: "جاري سحب صفحات الفصل من المصدر...",
-        });
-        
-        try {
-          const { data: { session } } = await supabase.auth.getSession();
-          const response = await supabase.functions.invoke('scrape-lekmanga', {
-            body: {
-              url: chapterData.source_url,
-              jobType: 'pages',
-              chapterId: chapterData.id,
-              source: mangaData.source
-            },
-            headers: session ? { Authorization: `Bearer ${session.access_token}` } : {}
-          });
-
-          if (response.error) {
-            console.error('Scraping error:', response.error);
-            toast({
-              title: "خطأ",
-              description: "فشل سحب صفحات الفصل. حاول مرة أخرى لاحقاً",
-              variant: "destructive",
-            });
-          } else {
-            // Reload pages after scraping
-            const { data: newPagesData } = await supabase
-              .from('chapter_pages')
-              .select('*')
-              .eq('chapter_id', chapterData.id)
-              .order('page_number', { ascending: true });
-            
-            setPages(newPagesData?.map(p => p.image_url) || []);
-            toast({
-              title: "تم بنجاح",
-              description: `تم تحميل ${newPagesData?.length || 0} صفحة`,
-            });
-          }
-        } catch (scrapeError) {
-          console.error('Failed to scrape pages:', scrapeError);
-          toast({
-            title: "خطأ",
-            description: "فشل سحب الصفحات من المصدر",
-            variant: "destructive",
-          });
-        }
+        await scrapeAndReloadPages(mangaData, chapterData);
       } else {
         setPages(pagesData.map(p => p.image_url));
       }
@@ -330,6 +337,21 @@ const Reader = () => {
                   <Home className="h-5 w-5" />
                 </Button>
               </Link>
+
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                className="text-white hover:bg-white/10"
+                onClick={() => manga && chapter && scrapeAndReloadPages(manga, chapter)}
+                disabled={rescraping}
+                aria-label="تحديث صفحات الفصل"
+              >
+                {rescraping ? (
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-5 w-5" />
+                )}
+              </Button>
 
               <Button 
                 variant="ghost" 
