@@ -644,7 +644,12 @@ function extractSlug(url: string): string {
 
 // Clean URL by removing whitespace, tabs, and newlines
 function cleanUrl(url: string): string {
-  return url.replace(/[\s\t\n\r]+/g, '').trim();
+  // Also handle JSON-escaped URLs like https:\/\/example.com\/path
+  return url
+    .replace(/\\u002F/g, '/')
+    .replace(/\\\//g, '/')
+    .replace(/[\s\t\n\r]+/g, '')
+    .trim();
 }
 
 async function scrapeMangaInfo(url: string, source: string, supabase: any) {
@@ -1344,22 +1349,21 @@ async function scrapeChapterPages(chapterUrl: string, source: string, supabase: 
   // Collect ALL images from the chapter
   const urlSet = new Set<string>();
 
-  const addUrl = (rawUrl?: string | null) => {
-    if (!rawUrl) return;
-    const cleanedUrl = cleanUrl(rawUrl);
-    if (!cleanedUrl) return;
+const addUrl = (rawUrl?: string | null) => {
+  if (!rawUrl) return;
+  const cleanedUrl = cleanUrl(rawUrl);
+  if (!cleanedUrl) return;
 
-    if (
-      cleanedUrl.includes('data:image') ||
-      cleanedUrl.includes('placeholder') ||
-      cleanedUrl.includes('logo') ||
-      cleanedUrl.includes('icon')
-    ) {
-      return;
-    }
+  if (cleanedUrl.startsWith('data:image')) return;
+  if (/(?:placeholder|logo|icon)/i.test(cleanedUrl)) return;
 
-    urlSet.add(cleanedUrl);
-  };
+  // lavatoons: الصفحة فيها صور كثيرة (لوغو/ثيم/مقالات). نسمح فقط بصور الفصل الحقيقية.
+  if (isLavatoons && !/\/wp-content\/uploads\/manga\//i.test(cleanedUrl)) {
+    return;
+  }
+
+  urlSet.add(cleanedUrl);
+};
 
   // Method 1: Try DOM selectors
   for (const imageSelector of config.selectors.pageImages) {
@@ -1394,14 +1398,20 @@ async function scrapeChapterPages(chapterUrl: string, source: string, supabase: 
   if (urlSet.size === 0 || isLavatoons) {
     console.log(`[Pages] Trying regex extraction...`);
 
-    const regexPatterns = [
-      // Lavatoons specific pattern
-      /https?:\/\/lavatoons\.com\/wp-content\/uploads\/manga\/[^"'\s<>]+?\.(?:jpg|jpeg|png|webp|gif)(?:\?[^"'\s<>]*)?/gi,
-      // Generic WordPress manga patterns
+const regexPatterns = isLavatoons
+  ? [
+      // Absolute URLs (normal)
+      /https?:\/\/(?:www\.)?lavatoons\.com\/wp-content\/uploads\/manga\/[^"'\s<>]+?\.(?:jpg|jpeg|png|webp|gif)(?:\?[^"'\s<>]*)?/gi,
+      // Absolute URLs (JSON-escaped: https:\/\/lavatoons.com\/...)
+      /https?:\\\/\\\/(?:www\\\.)?lavatoons\.com\\\/wp-content\\\/uploads\\\/manga\\\/[^"'\s<>]+?\.(?:jpg|jpeg|png|webp|gif)(?:\?[^"'\s<>]*)?/gi,
+      // Relative URLs
+      /\/wp-content\/uploads\/manga\/[^"'\s<>]+?\.(?:jpg|jpeg|png|webp|gif)(?:\?[^"'\s<>]*)?/gi,
+      // Reader images in markup
+      /<img[^>]+class="[^"]*ts-main-image[^"]*"[^>]+(?:src|data-src)="([^"]+)"/gi,
+    ]
+  : [
       /https?:\/\/[^"'\s<>]+\/wp-content\/uploads\/[^"'\s<>]+?\.(?:jpg|jpeg|png|webp|gif)(?:\?[^"'\s<>]*)?/gi,
-      // Generic manga image patterns
       /https?:\/\/[^"'\s<>]+\/manga\/[^"'\s<>]+?\.(?:jpg|jpeg|png|webp|gif)(?:\?[^"'\s<>]*)?/gi,
-      // Reader area images
       /<img[^>]+class="[^"]*ts-main-image[^"]*"[^>]+src="([^"]+)"/gi,
     ];
 
@@ -1471,12 +1481,24 @@ async function scrapeChapterPages(chapterUrl: string, source: string, supabase: 
         if (endIdx > startIdx) {
           const arrayLiteral = html.slice(startIdx, endIdx + 1);
 
-          // Extract any image URLs inside the array (even if structure changes)
-          for (const m of arrayLiteral.matchAll(
-            /https?:\/\/[^"'\s<>]+?\.(?:jpg|jpeg|png|webp|gif)(?:\?[^"'\s<>]*)?/gi
-          )) {
-            addUrl(m[0]);
-          }
+// Extract any image URLs inside the array (even if structure changes)
+// - normal: https://...
+// - escaped: https:\/\/...
+for (const m of arrayLiteral.matchAll(
+  /https?:\/\/[^"'\s<>]+?\.(?:jpg|jpeg|png|webp|gif)(?:\?[^"'\s<>]*)?/gi
+)) {
+  addUrl(m[0]);
+}
+for (const m of arrayLiteral.matchAll(
+  /https?:\\\/\\\/[^"'\s<>]+?\.(?:jpg|jpeg|png|webp|gif)(?:\?[^"'\s<>]*)?/gi
+)) {
+  addUrl(m[0]);
+}
+for (const m of arrayLiteral.matchAll(
+  /\/wp-content\/uploads\/manga\/[^"'\s<>]+?\.(?:jpg|jpeg|png|webp|gif)(?:\?[^"'\s<>]*)?/gi
+)) {
+  addUrl(m[0]);
+}
 
           console.log(`[Pages] ts_reader_control.pages total unique URLs so far: ${urlSet.size}`);
         }
