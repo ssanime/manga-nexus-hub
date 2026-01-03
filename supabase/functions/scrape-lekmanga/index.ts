@@ -1340,9 +1340,26 @@ async function scrapeChapterPages(chapterUrl: string, source: string, supabase: 
   if (!doc) throw new Error('Failed to parse HTML');
 
   const pages: any[] = [];
-  
+
   // Collect ALL images from the chapter
-  let extractedUrls: string[] = [];
+  const urlSet = new Set<string>();
+
+  const addUrl = (rawUrl?: string | null) => {
+    if (!rawUrl) return;
+    const cleanedUrl = cleanUrl(rawUrl);
+    if (!cleanedUrl) return;
+
+    if (
+      cleanedUrl.includes('data:image') ||
+      cleanedUrl.includes('placeholder') ||
+      cleanedUrl.includes('logo') ||
+      cleanedUrl.includes('icon')
+    ) {
+      return;
+    }
+
+    urlSet.add(cleanedUrl);
+  };
 
   // Method 1: Try DOM selectors
   for (const imageSelector of config.selectors.pageImages) {
@@ -1350,26 +1367,22 @@ async function scrapeChapterPages(chapterUrl: string, source: string, supabase: 
       const imageElements = doc.querySelectorAll(imageSelector);
       if (imageElements.length > 0) {
         console.log(`[Pages] Found ${imageElements.length} images with selector: ${imageSelector}`);
-        
-        // Extract URLs from all image elements
+
         for (let i = 0; i < imageElements.length; i++) {
           const img = imageElements[i] as any;
-          const imgUrl = img.getAttribute('src') || 
-                         img.getAttribute('data-src') || 
-                         img.getAttribute('data-lazy-src') ||
-                         img.getAttribute('data-original') || '';
-          
-          if (imgUrl && !imgUrl.includes('data:image') && !imgUrl.includes('placeholder')) {
-            const cleanedUrl = cleanUrl(imgUrl);
-            if (cleanedUrl && !extractedUrls.includes(cleanedUrl)) {
-              extractedUrls.push(cleanedUrl);
-            }
-          }
+          const imgUrl =
+            img.getAttribute('src') ||
+            img.getAttribute('data-src') ||
+            img.getAttribute('data-lazy-src') ||
+            img.getAttribute('data-original') ||
+            '';
+
+          if (imgUrl) addUrl(imgUrl);
         }
-        
-        if (extractedUrls.length > 0) {
-          console.log(`[Pages] Extracted ${extractedUrls.length} unique image URLs from DOM`);
-          break; // Use first successful selector
+
+        if (urlSet.size > 0 && !isLavatoons) {
+          console.log(`[Pages] Extracted ${urlSet.size} unique image URLs from DOM`);
+          break; // Use first successful selector for non-lavatoons
         }
       }
     } catch (err: any) {
@@ -1377,11 +1390,10 @@ async function scrapeChapterPages(chapterUrl: string, source: string, supabase: 
     }
   }
 
-  // Method 2: Regex fallback for lavatoons and other sites
-  if (extractedUrls.length === 0) {
-    console.log(`[Pages] DOM selectors failed, trying regex extraction...`);
-    
-    // Multiple regex patterns for different sites
+  // Method 2: Regex extraction (run always for lavatoons to avoid missing pages)
+  if (urlSet.size === 0 || isLavatoons) {
+    console.log(`[Pages] Trying regex extraction...`);
+
     const regexPatterns = [
       // Lavatoons specific pattern
       /https?:\/\/lavatoons\.com\/wp-content\/uploads\/manga\/[^"'\s<>]+?\.(?:jpg|jpeg|png|webp|gif)(?:\?[^"'\s<>]*)?/gi,
@@ -1392,46 +1404,94 @@ async function scrapeChapterPages(chapterUrl: string, source: string, supabase: 
       // Reader area images
       /<img[^>]+class="[^"]*ts-main-image[^"]*"[^>]+src="([^"]+)"/gi,
     ];
-    
+
     for (const pattern of regexPatterns) {
       const matches = html.matchAll(pattern);
       for (const match of matches) {
-        // Handle both full match and capture groups
-        const url = match[1] || match[0];
-        if (url) {
-          const cleanedUrl = cleanUrl(url);
-          if (cleanedUrl && 
-              !cleanedUrl.includes('data:image') && 
-              !cleanedUrl.includes('placeholder') &&
-              !cleanedUrl.includes('logo') &&
-              !cleanedUrl.includes('icon') &&
-              !extractedUrls.includes(cleanedUrl)) {
-            extractedUrls.push(cleanedUrl);
+        addUrl(match[1] || match[0]);
+      }
+
+      if (urlSet.size > 0 && !isLavatoons) {
+        console.log(`[Pages] Regex extracted ${urlSet.size} image URLs`);
+        break;
+      }
+    }
+
+    if (urlSet.size > 0) {
+      console.log(`[Pages] Regex total unique URLs so far: ${urlSet.size}`);
+    }
+  }
+
+  // Method 3: Robust ts_reader_control.pages extraction (lavatoons)
+  if (urlSet.size === 0 || isLavatoons) {
+    const keyMatch = /ts_reader_control\s*\.\s*pages\s*=\s*\[/i.exec(html);
+    if (keyMatch) {
+      const startIdx = html.indexOf('[', keyMatch.index);
+      if (startIdx >= 0) {
+        // Extract the full array literal by walking brackets (handles newlines safely)
+        let depth = 0;
+        let inString: '"' | "'" | null = null;
+        let escaped = false;
+        let endIdx = -1;
+
+        for (let i = startIdx; i < html.length; i++) {
+          const ch = html[i];
+
+          if (escaped) {
+            escaped = false;
+            continue;
+          }
+
+          if (inString) {
+            if (ch === '\\') {
+              escaped = true;
+              continue;
+            }
+            if (ch === inString) {
+              inString = null;
+            }
+            continue;
+          }
+
+          if (ch === '"' || ch === "'") {
+            inString = ch as any;
+            continue;
+          }
+
+          if (ch === '[') depth++;
+          if (ch === ']') {
+            depth--;
+            if (depth === 0) {
+              endIdx = i;
+              break;
+            }
           }
         }
+
+        if (endIdx > startIdx) {
+          const arrayLiteral = html.slice(startIdx, endIdx + 1);
+
+          // Extract any image URLs inside the array (even if structure changes)
+          for (const m of arrayLiteral.matchAll(
+            /https?:\/\/[^"'\s<>]+?\.(?:jpg|jpeg|png|webp|gif)(?:\?[^"'\s<>]*)?/gi
+          )) {
+            addUrl(m[0]);
+          }
+
+          console.log(`[Pages] ts_reader_control.pages total unique URLs so far: ${urlSet.size}`);
+        }
       }
-      
-      if (extractedUrls.length > 0) {
-        console.log(`[Pages] Regex extracted ${extractedUrls.length} image URLs`);
-        break;
+    }
+
+    if (isLavatoons && urlSet.size <= 1) {
+      const idx = html.toLowerCase().indexOf('ts_reader_control');
+      if (idx >= 0) {
+        console.log(`[Pages] Debug ts_reader_control snippet: ${html.substring(idx, idx + 400)}`);
       }
     }
   }
 
-  // Method 3: Look for ts_reader_control.pages array in script
-  if (extractedUrls.length === 0 || isLavatoons) {
-    const scriptMatch = html.match(/ts_reader_control\s*\.\s*pages\s*=\s*\[([^\]]+)\]/i);
-    if (scriptMatch) {
-      const urlMatches = scriptMatch[1].matchAll(/"([^"]+)"/g);
-      for (const m of urlMatches) {
-        const url = cleanUrl(m[1]);
-        if (url && url.includes('http') && !extractedUrls.includes(url)) {
-          extractedUrls.push(url);
-        }
-      }
-      console.log(`[Pages] Found ${extractedUrls.length} images from ts_reader_control.pages`);
-    }
-  }
+  const extractedUrls = Array.from(urlSet);
 
   // Sort images by page number if possible
   extractedUrls.sort((a, b) => {
