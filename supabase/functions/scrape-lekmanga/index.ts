@@ -1349,21 +1349,27 @@ async function scrapeChapterPages(chapterUrl: string, source: string, supabase: 
   // Collect ALL images from the chapter
   const urlSet = new Set<string>();
 
-const addUrl = (rawUrl?: string | null) => {
-  if (!rawUrl) return;
-  const cleanedUrl = cleanUrl(rawUrl);
-  if (!cleanedUrl) return;
+  const isLavatoonsChapterPageImage = (u: string) => {
+    // Example: /wp-content/uploads/manga/943a9860/001.jpg
+    // We only accept numeric page filenames to avoid covers/logos that might live in the same folder.
+    return /\/wp-content\/uploads\/manga\/[^"'\s<>]+\/\d{1,4}\.(?:jpg|jpeg|png|webp|gif)(?:\?|$)/i.test(u);
+  };
 
-  if (cleanedUrl.startsWith('data:image')) return;
-  if (/(?:placeholder|logo|icon)/i.test(cleanedUrl)) return;
+  const addUrl = (rawUrl?: string | null) => {
+    if (!rawUrl) return;
+    const cleanedUrl = cleanUrl(rawUrl);
+    if (!cleanedUrl) return;
 
-  // lavatoons: الصفحة فيها صور كثيرة (لوغو/ثيم/مقالات). نسمح فقط بصور الفصل الحقيقية.
-  if (isLavatoons && !/\/wp-content\/uploads\/manga\//i.test(cleanedUrl)) {
-    return;
-  }
+    if (cleanedUrl.startsWith('data:image')) return;
+    if (/(?:placeholder|logo|icon)/i.test(cleanedUrl)) return;
 
-  urlSet.add(cleanedUrl);
-};
+    // lavatoons: الصفحة فيها صور كثيرة (لوغو/ثيم/غلاف/إعلانات). نسمح فقط بصور الفصل الحقيقية (رقمية).
+    if (isLavatoons && !isLavatoonsChapterPageImage(cleanedUrl)) {
+      return;
+    }
+
+    urlSet.add(cleanedUrl);
+  };
 
   // Method 1: Try DOM selectors
   for (const imageSelector of config.selectors.pageImages) {
@@ -1394,29 +1400,35 @@ const addUrl = (rawUrl?: string | null) => {
     }
   }
 
-  // Method 2: Regex extraction (run always for lavatoons to avoid missing pages)
+  // Method 2: Regex extraction
+  // For lavatoons we scope regex to #readerarea only to avoid picking theme images/covers.
   if (urlSet.size === 0 || isLavatoons) {
     console.log(`[Pages] Trying regex extraction...`);
 
-const regexPatterns = isLavatoons
-  ? [
-      // Absolute URLs (normal)
-      /https?:\/\/(?:www\.)?lavatoons\.com\/wp-content\/uploads\/manga\/[^"'\s<>]+?\.(?:jpg|jpeg|png|webp|gif)(?:\?[^"'\s<>]*)?/gi,
-      // Absolute URLs (JSON-escaped: https:\/\/lavatoons.com\/...)
-      /https?:\\\/\\\/(?:www\\\.)?lavatoons\.com\\\/wp-content\\\/uploads\\\/manga\\\/[^"'\s<>]+?\.(?:jpg|jpeg|png|webp|gif)(?:\?[^"'\s<>]*)?/gi,
-      // Relative URLs
-      /\/wp-content\/uploads\/manga\/[^"'\s<>]+?\.(?:jpg|jpeg|png|webp|gif)(?:\?[^"'\s<>]*)?/gi,
-      // Reader images in markup
-      /<img[^>]+class="[^"]*ts-main-image[^"]*"[^>]+(?:src|data-src)="([^"]+)"/gi,
-    ]
-  : [
-      /https?:\/\/[^"'\s<>]+\/wp-content\/uploads\/[^"'\s<>]+?\.(?:jpg|jpeg|png|webp|gif)(?:\?[^"'\s<>]*)?/gi,
-      /https?:\/\/[^"'\s<>]+\/manga\/[^"'\s<>]+?\.(?:jpg|jpeg|png|webp|gif)(?:\?[^"'\s<>]*)?/gi,
-      /<img[^>]+class="[^"]*ts-main-image[^"]*"[^>]+src="([^"]+)"/gi,
-    ];
+    const readerAreaMatch = isLavatoons
+      ? html.match(/<div[^>]+id=["']readerarea["'][^>]*>[\s\S]*?<\/div>/i)
+      : null;
+    const regexScopeHtml = readerAreaMatch?.[0] || html;
+
+    const regexPatterns = isLavatoons
+      ? [
+          // Absolute URLs (normal)
+          /https?:\/\/(?:www\.)?lavatoons\.com\/wp-content\/uploads\/manga\/[^"'\s<>]+?\/\d{1,4}\.(?:jpg|jpeg|png|webp|gif)(?:\?[^"'\s<>]*)?/gi,
+          // Absolute URLs (JSON-escaped: https:\/\/lavatoons.com\/...)
+          /https?:\\\/\\\/(?:www\\\.)?lavatoons\.com\\\/wp-content\\\/uploads\\\/manga\\\/[^"'\s<>]+?\\\/\d{1,4}\.(?:jpg|jpeg|png|webp|gif)(?:\?[^"'\s<>]*)?/gi,
+          // Relative URLs
+          /\/wp-content\/uploads\/manga\/[^"'\s<>]+?\/\d{1,4}\.(?:jpg|jpeg|png|webp|gif)(?:\?[^"'\s<>]*)?/gi,
+          // Reader images in markup
+          /<img[^>]+class="[^"]*ts-main-image[^"]*"[^>]+(?:src|data-src)="([^"]+)"/gi,
+        ]
+      : [
+          /https?:\/\/[^"'\s<>]+\/wp-content\/uploads\/[^"'\s<>]+?\.(?:jpg|jpeg|png|webp|gif)(?:\?[^"'\s<>]*)?/gi,
+          /https?:\/\/[^"'\s<>]+\/manga\/[^"'\s<>]+?\.(?:jpg|jpeg|png|webp|gif)(?:\?[^"'\s<>]*)?/gi,
+          /<img[^>]+class="[^"]*ts-main-image[^"]*"[^>]+src="([^"]+)"/gi,
+        ];
 
     for (const pattern of regexPatterns) {
-      const matches = html.matchAll(pattern);
+      const matches = regexScopeHtml.matchAll(pattern);
       for (const match of matches) {
         addUrl(match[1] || match[0]);
       }
