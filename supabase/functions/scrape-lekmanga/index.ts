@@ -1342,66 +1342,50 @@ async function scrapeChapterPages(chapterUrl: string, source: string, supabase: 
 
   let html = await fetchHTML(chapterUrl, config);
 
-  // lavatoons: بعض الصفحات تُبنى بالـ JS (صور داخل #readerarea) وقد لا تظهر في HTML الخام.
-  // إذا لم نجد أي مؤشر لصور الفصل، نجرب الحصول على HTML مُرندر عبر وظيفة الـ bypass.
+  // Parse early so we can reliably detect whether the reader content exists
+  let doc = new DOMParser().parseFromString(html, 'text/html');
+  if (!doc) throw new Error('Failed to parse HTML');
+
+  // lavatoons: أحياناً السيرفر يرجّع HTML ناقص (بدون صور الفصل) للمُكشّط.
+  // إذا لم نجد صور داخل #readerarea ولا نجد روابط صور فصل حقيقية داخل الـ HTML، نجيب نسخة مُرندر عبر cloudflare-bypass.
   if (isLavatoons) {
-    const lower = html.toLowerCase();
-    const looksUnrendered =
-      !lower.includes('id="readerarea"') &&
-      !lower.includes("id='readerarea'") &&
-      !lower.includes('ts-main-image') &&
-      !lower.includes('/wp-content/uploads/manga/');
+    const initialReaderImgs = doc.querySelectorAll('#readerarea img, #readerarea img.ts-main-image').length;
+    const hasAnyChapterImgUrl = /\/wp-content\/uploads\/manga\/[^"'\s<>]+\/\d{1,4}\.(?:jpg|jpeg|png|webp|gif)/i.test(html);
 
-    if (looksUnrendered) {
-      console.log('[Pages] Lavatoons HTML يبدو غير مُرندر - forcing bypass render...');
-      try {
-        const supabaseUrl = Deno.env.get('SUPABASE_URL');
-        const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    if (initialReaderImgs === 0 && !hasAnyChapterImgUrl) {
+      console.log(`[Pages] Lavatoons: readerarea images=0 -> trying rendered HTML via cloudflare-bypass...`);
 
-        if (supabaseUrl && supabaseKey) {
-          const bypassResponse = await fetch(`${supabaseUrl}/functions/v1/cloudflare-bypass`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${supabaseKey}`,
-            },
-            body: JSON.stringify({ url: chapterUrl }),
-          });
+      const { data, error } = await supabase.functions.invoke('cloudflare-bypass', {
+        body: { url: chapterUrl },
+      });
 
-          const bypassJson = await bypassResponse.json().catch(() => null);
-          const bypassHtml = bypassJson?.html;
+      if (error) {
+        console.log('[Pages] cloudflare-bypass invoke error:', error.message);
+      } else {
+        const bypassHtml = (data as any)?.html;
 
-          if (
-            bypassResponse.ok &&
-            bypassJson?.success &&
-            typeof bypassHtml === 'string' &&
-            bypassHtml.length > 500
-          ) {
-            const bypassLower = bypassHtml.toLowerCase();
-            const hasReaderContent =
-              bypassLower.includes('id="readerarea"') ||
-              bypassLower.includes("id='readerarea'") ||
-              bypassLower.includes('ts-main-image') ||
-              bypassLower.includes('/wp-content/uploads/manga/');
+        if (typeof bypassHtml === 'string' && bypassHtml.length > 500) {
+          const bypassDoc = new DOMParser().parseFromString(bypassHtml, 'text/html');
+          const bypassReaderImgs = bypassDoc
+            ? bypassDoc.querySelectorAll('#readerarea img, #readerarea img.ts-main-image').length
+            : 0;
+          const bypassHasChapterImgUrl = /\/wp-content\/uploads\/manga\/[^"'\s<>]+\/\d{1,4}\.(?:jpg|jpeg|png|webp|gif)/i.test(bypassHtml);
 
-            if (hasReaderContent) {
-              console.log('[Pages] ✓ Using rendered HTML from bypass');
-              html = bypassHtml;
-            } else {
-              console.log('[Pages] Bypass HTML returned but still missing reader content');
-            }
+          console.log(`[Pages] cloudflare-bypass returned ${bypassHtml.length} bytes, reader images=${bypassReaderImgs}`);
+
+          if (bypassDoc && (bypassReaderImgs > 0 || bypassHasChapterImgUrl)) {
+            console.log('[Pages] ✓ Using rendered HTML from cloudflare-bypass');
+            html = bypassHtml;
+            doc = bypassDoc;
           } else {
-            console.log('[Pages] Bypass did not succeed');
+            console.log('[Pages] cloudflare-bypass HTML still missing reader images');
           }
+        } else {
+          console.log('[Pages] cloudflare-bypass returned empty/short HTML');
         }
-      } catch (e: any) {
-        console.log('[Pages] Bypass render error:', e?.message);
       }
     }
   }
-
-  const doc = new DOMParser().parseFromString(html, 'text/html');
-  if (!doc) throw new Error('Failed to parse HTML');
 
   const pages: any[] = [];
 
