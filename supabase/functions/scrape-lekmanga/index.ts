@@ -1340,7 +1340,66 @@ async function scrapeChapterPages(chapterUrl: string, source: string, supabase: 
     config.selectors.pageImages = Array.from(new Set([...forced, ...config.selectors.pageImages]));
   }
 
-  const html = await fetchHTML(chapterUrl, config);
+  let html = await fetchHTML(chapterUrl, config);
+
+  // lavatoons: بعض الصفحات تُبنى بالـ JS (صور داخل #readerarea) وقد لا تظهر في HTML الخام.
+  // إذا لم نجد أي مؤشر لصور الفصل، نجرب الحصول على HTML مُرندر عبر وظيفة الـ bypass.
+  if (isLavatoons) {
+    const lower = html.toLowerCase();
+    const looksUnrendered =
+      !lower.includes('id="readerarea"') &&
+      !lower.includes("id='readerarea'") &&
+      !lower.includes('ts-main-image') &&
+      !lower.includes('/wp-content/uploads/manga/');
+
+    if (looksUnrendered) {
+      console.log('[Pages] Lavatoons HTML يبدو غير مُرندر - forcing bypass render...');
+      try {
+        const supabaseUrl = Deno.env.get('SUPABASE_URL');
+        const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+
+        if (supabaseUrl && supabaseKey) {
+          const bypassResponse = await fetch(`${supabaseUrl}/functions/v1/cloudflare-bypass`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${supabaseKey}`,
+            },
+            body: JSON.stringify({ url: chapterUrl }),
+          });
+
+          const bypassJson = await bypassResponse.json().catch(() => null);
+          const bypassHtml = bypassJson?.html;
+
+          if (
+            bypassResponse.ok &&
+            bypassJson?.success &&
+            typeof bypassHtml === 'string' &&
+            bypassHtml.length > 500
+          ) {
+            const bypassLower = bypassHtml.toLowerCase();
+            const hasReaderContent =
+              bypassLower.includes('id="readerarea"') ||
+              bypassLower.includes("id='readerarea'") ||
+              bypassLower.includes('ts-main-image') ||
+              bypassLower.includes('/wp-content/uploads/manga/');
+
+            if (hasReaderContent) {
+              console.log('[Pages] ✓ Using rendered HTML from bypass');
+              html = bypassHtml;
+            } else {
+              console.log('[Pages] Bypass HTML returned but still missing reader content');
+            }
+          } else {
+            console.log('[Pages] Bypass did not succeed');
+          }
+        }
+      } catch (e: any) {
+        console.log('[Pages] Bypass render error:', e?.message);
+      }
+    }
+  }
+
   const doc = new DOMParser().parseFromString(html, 'text/html');
   if (!doc) throw new Error('Failed to parse HTML');
 
