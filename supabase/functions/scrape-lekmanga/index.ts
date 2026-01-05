@@ -292,6 +292,52 @@ async function loadScraperConfig(supabase: any, sourceName: string) {
         catalogMangaLink: [".item-thumb a", ".post-title a"],
         catalogMangaCover: [".item-thumb img", "img"]
       }
+    },
+    // NEW: MeshManga.com - Arabic manga site with custom layout
+    "meshmanga": {
+      baseUrl: "https://meshmanga.com",
+      selectors: {
+        // معلومات المانجا
+        title: ["h1", ".series-title", ".manga-title", "meta[property='og:title']"],
+        cover: ["img.series-cover", ".cover img", "meta[property='og:image']", "img[alt]"],
+        description: [".description", ".synopsis", "meta[property='og:description']", "p"],
+        status: [".status", ".manga-status"],
+        genres: [".genre a", ".tag a", "a[href*='genre']"],
+        author: [".author", ".manga-author"],
+        artist: [".artist", ".manga-artist"],
+        rating: [".rating", ".score"],
+        // الفصول - نمط: الفصل: XX
+        chapters: [".chapter-item", ".chapter-list > div", "div[class*='chapter']"],
+        chapterTitle: ["a", ".chapter-title"],
+        chapterUrl: ["a"],
+        chapterDate: [".chapter-date", ".date", "span"],
+        // صور الفصل - من appswat.com CDN
+        pageImages: [".flex-col img.w-full", "img.w-full.h-auto", "img[src*='appswat.com']", "img[src*='/v2/media/series/']"],
+        catalogMangaCard: [".series-card", ".manga-card", "article"],
+        catalogMangaLink: ["a[href*='/series/']", "a"],
+        catalogMangaCover: ["img"]
+      }
+    },
+    "meshmanga.com": {
+      baseUrl: "https://meshmanga.com",
+      selectors: {
+        title: ["h1", ".series-title", ".manga-title", "meta[property='og:title']"],
+        cover: ["img.series-cover", ".cover img", "meta[property='og:image']", "img[alt]"],
+        description: [".description", ".synopsis", "meta[property='og:description']", "p"],
+        status: [".status", ".manga-status"],
+        genres: [".genre a", ".tag a", "a[href*='genre']"],
+        author: [".author", ".manga-author"],
+        artist: [".artist", ".manga-artist"],
+        rating: [".rating", ".score"],
+        chapters: [".chapter-item", ".chapter-list > div", "div[class*='chapter']"],
+        chapterTitle: ["a", ".chapter-title"],
+        chapterUrl: ["a"],
+        chapterDate: [".chapter-date", ".date", "span"],
+        pageImages: [".flex-col img.w-full", "img.w-full.h-auto", "img[src*='appswat.com']", "img[src*='/v2/media/series/']"],
+        catalogMangaCard: [".series-card", ".manga-card", "article"],
+        catalogMangaLink: ["a[href*='/series/']", "a"],
+        catalogMangaCover: ["img"]
+      }
     }
   };
   
@@ -1098,6 +1144,83 @@ async function scrapeChapters(mangaUrl: string, source: string, supabase: any) {
     console.log(`[Chapters] ⚠️ No eplister chapters found, trying standard selectors...`);
   }
   
+  // Special handling for meshmanga.com - uses "الفصل: XX" format
+  const isMeshmanga = sourceLower.includes('meshmanga') || mangaUrl.includes('meshmanga.com');
+  if (isMeshmanga) {
+    console.log(`[Chapters] Using meshmanga chapter extraction method`);
+    
+    // meshmanga format: الفصل: XX with links to /chapter/XXXXX
+    // Try to extract chapter links from HTML
+    const chapterLinkPattern = /<a[^>]+href=["'](https?:\/\/[^"']*meshmanga\.com\/chapter\/(\d+)[^"']*)["'][^>]*>/gi;
+    const chapterTextPattern = /الفصل:\s*(\d+(?:\.\d+)?(?:\s+[^\n<]*)?)/gi;
+    
+    // First pass: get all chapter URLs
+    const chapterUrls = new Map<number, string>();
+    let linkMatch;
+    while ((linkMatch = chapterLinkPattern.exec(html)) !== null) {
+      const url = linkMatch[1];
+      const chapterId = linkMatch[2];
+      
+      // Try to find chapter number from surrounding text or URL
+      // The chapter ID in URL is not the chapter number, we need to find the actual number
+      if (url && chapterId) {
+        // Store with chapter ID for now, we'll match with actual numbers later
+        chapterUrls.set(parseInt(chapterId), url);
+      }
+    }
+    
+    console.log(`[Chapters] Found ${chapterUrls.size} chapter URLs from meshmanga`);
+    
+    // Second pass: try to match chapter numbers with their URLs
+    // Look for patterns like: href="...chapter/1720472"...الفصل: 114
+    const fullPattern = /<a[^>]+href=["'](https?:\/\/[^"']*meshmanga\.com\/chapter\/\d+[^"']*)["'][^>]*>[\s\S]*?الفصل:\s*(\d+(?:\.\d+)?)/gi;
+    let fullMatch;
+    while ((fullMatch = fullPattern.exec(html)) !== null) {
+      const url = fullMatch[1];
+      const chapterNum = parseFloat(fullMatch[2]);
+      
+      if (url && chapterNum) {
+        const existingChapter = chapters.find(c => c.chapter_number === chapterNum);
+        if (!existingChapter) {
+          chapters.push({
+            chapter_number: chapterNum,
+            title: `الفصل ${chapterNum}`,
+            source_url: url,
+            release_date: null,
+          });
+        }
+      }
+    }
+    
+    // Also try alternate pattern where chapter info is in separate elements
+    const altPattern = /href=["'](https?:\/\/[^"']*meshmanga\.com\/chapter\/\d+[^"']*)["'][\s\S]{0,500}?الفصل:\s*(\d+(?:\.\d+)?)/gi;
+    let altMatch;
+    while ((altMatch = altPattern.exec(html)) !== null) {
+      const url = altMatch[1];
+      const chapterNum = parseFloat(altMatch[2]);
+      
+      if (url && chapterNum) {
+        const existingChapter = chapters.find(c => c.chapter_number === chapterNum);
+        if (!existingChapter) {
+          chapters.push({
+            chapter_number: chapterNum,
+            title: `الفصل ${chapterNum}`,
+            source_url: url,
+            release_date: null,
+          });
+        }
+      }
+    }
+    
+    if (chapters.length > 0) {
+      chapters.sort((a, b) => a.chapter_number - b.chapter_number);
+      console.log(`[Chapters] ✅ Success: ${chapters.length} chapters for meshmanga`);
+      return chapters;
+    }
+    
+    console.log(`[Chapters] ⚠️ No meshmanga chapters found with regex, trying DOM...`);
+  }
+  
   // Try each chapter selector for other sources
   for (const chapterSelector of config.selectors.chapters) {
     const chapterElements = doc.querySelectorAll(chapterSelector);
@@ -1329,6 +1452,7 @@ async function scrapeChapterPages(chapterUrl: string, source: string, supabase: 
 
   const sourceLower = (source || '').toLowerCase();
   const isLavatoons = sourceLower.includes('lavatoons') || chapterUrl.includes('lavatoons.com');
+  const isMeshmanga = sourceLower.includes('meshmanga') || chapterUrl.includes('meshmanga.com');
 
   // Ensure selectors shape
   config.selectors = config.selectors || {};
@@ -1337,6 +1461,12 @@ async function scrapeChapterPages(chapterUrl: string, source: string, supabase: 
   // lavatoons: dynamic DB config may not include correct reader selectors
   if (isLavatoons) {
     const forced = ['#readerarea img.ts-main-image', '#readerarea img', 'img.ts-main-image'];
+    config.selectors.pageImages = Array.from(new Set([...forced, ...config.selectors.pageImages]));
+  }
+  
+  // meshmanga: force selectors for appswat.com CDN images
+  if (isMeshmanga) {
+    const forced = ['.flex-col img.w-full', 'img.w-full.h-auto', 'img[src*="appswat.com"]', 'img[src*="/v2/media/series/"]'];
     config.selectors.pageImages = Array.from(new Set([...forced, ...config.selectors.pageImages]));
   }
 
@@ -1411,6 +1541,13 @@ async function scrapeChapterPages(chapterUrl: string, source: string, supabase: 
     return /\/wp-content\/uploads\/manga\/[^"'\s<>]+\/\d{1,4}\.(?:jpg|jpeg|png|webp|gif)(?:\?|$)/i.test(u);
   };
 
+  const isMeshmangaChapterPageImage = (u: string) => {
+    // Example: https://appswat.com/v2/media/series/the_indomitable_martial_king/chapters/7600/0001.webp
+    // Accept images from appswat.com or meshmanga CDN with numeric filenames
+    return /appswat\.com\/v2\/media\/series\/[^"'\s<>]+\/chapters\/[^"'\s<>]+\/\d{4}\.(?:jpg|jpeg|png|webp|gif)/i.test(u) ||
+           /\/v2\/media\/series\/[^"'\s<>]+\/chapters\/[^"'\s<>]+\/\d{4}\.(?:jpg|jpeg|png|webp|gif)/i.test(u);
+  };
+
   const addUrl = (rawUrl?: string | null) => {
     if (!rawUrl) return;
     const cleanedUrl = cleanUrl(rawUrl);
@@ -1421,6 +1558,11 @@ async function scrapeChapterPages(chapterUrl: string, source: string, supabase: 
 
     // lavatoons: الصفحة فيها صور كثيرة (لوغو/ثيم/غلاف/إعلانات). نسمح فقط بصور الفصل الحقيقية (رقمية).
     if (isLavatoons && !isLavatoonsChapterPageImage(cleanedUrl)) {
+      return;
+    }
+    
+    // meshmanga: نسمح فقط بصور الفصل من appswat.com CDN
+    if (isMeshmanga && !isMeshmangaChapterPageImage(cleanedUrl)) {
       return;
     }
 
@@ -1477,11 +1619,20 @@ async function scrapeChapterPages(chapterUrl: string, source: string, supabase: 
           // Reader images in markup
           /<img[^>]+class="[^"]*ts-main-image[^"]*"[^>]+(?:src|data-src)="([^"]+)"/gi,
         ]
-      : [
-          /https?:\/\/[^"'\s<>]+\/wp-content\/uploads\/[^"'\s<>]+?\.(?:jpg|jpeg|png|webp|gif)(?:\?[^"'\s<>]*)?/gi,
-          /https?:\/\/[^"'\s<>]+\/manga\/[^"'\s<>]+?\.(?:jpg|jpeg|png|webp|gif)(?:\?[^"'\s<>]*)?/gi,
-          /<img[^>]+class="[^"]*ts-main-image[^"]*"[^>]+src="([^"]+)"/gi,
-        ];
+      : isMeshmanga
+        ? [
+            // meshmanga: صور من appswat.com CDN
+            /https?:\/\/appswat\.com\/v2\/media\/series\/[^"'\s<>]+\/chapters\/[^"'\s<>]+\/\d{4}\.(?:jpg|jpeg|png|webp|gif)/gi,
+            // أي صورة من meshmanga بنمط chapters/XXXX/YYYY.webp
+            /https?:\/\/[^"'\s<>]+\/v2\/media\/series\/[^"'\s<>]+\/chapters\/[^"'\s<>]+\/\d{4}\.(?:jpg|jpeg|png|webp|gif)/gi,
+            // صور w-full h-auto
+            /<img[^>]+class="[^"]*w-full[^"]*h-auto[^"]*"[^>]+src="([^"]+)"/gi,
+          ]
+        : [
+            /https?:\/\/[^"'\s<>]+\/wp-content\/uploads\/[^"'\s<>]+?\.(?:jpg|jpeg|png|webp|gif)(?:\?[^"'\s<>]*)?/gi,
+            /https?:\/\/[^"'\s<>]+\/manga\/[^"'\s<>]+?\.(?:jpg|jpeg|png|webp|gif)(?:\?[^"'\s<>]*)?/gi,
+            /<img[^>]+class="[^"]*ts-main-image[^"]*"[^>]+src="([^"]+)"/gi,
+          ];
 
     for (const pattern of regexPatterns) {
       const matches = regexScopeHtml.matchAll(pattern);
@@ -1489,7 +1640,7 @@ async function scrapeChapterPages(chapterUrl: string, source: string, supabase: 
         addUrl(match[1] || match[0]);
       }
 
-      if (urlSet.size > 0 && !isLavatoons) {
+      if (urlSet.size > 0 && !isLavatoons && !isMeshmanga) {
         console.log(`[Pages] Regex extracted ${urlSet.size} image URLs`);
         break;
       }
@@ -1498,6 +1649,23 @@ async function scrapeChapterPages(chapterUrl: string, source: string, supabase: 
     if (urlSet.size > 0) {
       console.log(`[Pages] Regex total unique URLs so far: ${urlSet.size}`);
     }
+  }
+  
+  // Method 3: Specific meshmanga extraction (appswat.com images)
+  if (isMeshmanga && urlSet.size === 0) {
+    console.log(`[Pages] Trying meshmanga specific extraction...`);
+    
+    // Look for all img tags with appswat.com sources
+    const imgPattern = /src=["'](https?:\/\/appswat\.com\/v2\/media\/series\/[^"']+\.(?:jpg|jpeg|png|webp|gif))["']/gi;
+    let imgMatch;
+    while ((imgMatch = imgPattern.exec(html)) !== null) {
+      const imgUrl = imgMatch[1];
+      if (imgUrl && /\/chapters\/[^\/]+\/\d{4}\./.test(imgUrl)) {
+        urlSet.add(imgUrl);
+      }
+    }
+    
+    console.log(`[Pages] Meshmanga specific extraction found ${urlSet.size} images`);
   }
 
   // Method 3: Robust ts_reader_control.pages extraction (lavatoons)
