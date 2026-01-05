@@ -1340,52 +1340,65 @@ async function scrapeChapterPages(chapterUrl: string, source: string, supabase: 
     config.selectors.pageImages = Array.from(new Set([...forced, ...config.selectors.pageImages]));
   }
 
-  let html = await fetchHTML(chapterUrl, config);
+  // lavatoons: استخدم Firecrawl للحصول على HTML مُرندر بالكامل
+  let html = '';
+  let doc: any = null;
 
-  // Parse early so we can reliably detect whether the reader content exists
-  let doc = new DOMParser().parseFromString(html, 'text/html');
-  if (!doc) throw new Error('Failed to parse HTML');
-
-  // lavatoons: أحياناً السيرفر يرجّع HTML ناقص (بدون صور الفصل) للمُكشّط.
-  // إذا لم نجد صور داخل #readerarea ولا نجد روابط صور فصل حقيقية داخل الـ HTML، نجيب نسخة مُرندر عبر cloudflare-bypass.
   if (isLavatoons) {
-    const initialReaderImgs = doc.querySelectorAll('#readerarea img, #readerarea img.ts-main-image').length;
-    const hasAnyChapterImgUrl = /\/wp-content\/uploads\/manga\/[^"'\s<>]+\/\d{1,4}\.(?:jpg|jpeg|png|webp|gif)/i.test(html);
+    console.log(`[Pages] Lavatoons detected - using Firecrawl for rendered HTML...`);
+    
+    const firecrawlApiKey = Deno.env.get('FIRECRAWL_API_KEY') || Deno.env.get('FIRECRAWL_API_KEY_1');
+    
+    if (firecrawlApiKey) {
+      try {
+        console.log(`[Pages] Calling Firecrawl API for: ${chapterUrl}`);
+        
+        const firecrawlResponse = await fetch('https://api.firecrawl.dev/v1/scrape', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${firecrawlApiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            url: chapterUrl,
+            formats: ['html'],
+            onlyMainContent: false,
+            waitFor: 5000, // انتظر 5 ثواني للصفحة تتحمّل كاملة
+          }),
+        });
 
-    if (initialReaderImgs === 0 && !hasAnyChapterImgUrl) {
-      console.log(`[Pages] Lavatoons: readerarea images=0 -> trying rendered HTML via cloudflare-bypass...`);
-
-      const { data, error } = await supabase.functions.invoke('cloudflare-bypass', {
-        body: { url: chapterUrl },
-      });
-
-      if (error) {
-        console.log('[Pages] cloudflare-bypass invoke error:', error.message);
-      } else {
-        const bypassHtml = (data as any)?.html;
-
-        if (typeof bypassHtml === 'string' && bypassHtml.length > 500) {
-          const bypassDoc = new DOMParser().parseFromString(bypassHtml, 'text/html');
-          const bypassReaderImgs = bypassDoc
-            ? bypassDoc.querySelectorAll('#readerarea img, #readerarea img.ts-main-image').length
-            : 0;
-          const bypassHasChapterImgUrl = /\/wp-content\/uploads\/manga\/[^"'\s<>]+\/\d{1,4}\.(?:jpg|jpeg|png|webp|gif)/i.test(bypassHtml);
-
-          console.log(`[Pages] cloudflare-bypass returned ${bypassHtml.length} bytes, reader images=${bypassReaderImgs}`);
-
-          if (bypassDoc && (bypassReaderImgs > 0 || bypassHasChapterImgUrl)) {
-            console.log('[Pages] ✓ Using rendered HTML from cloudflare-bypass');
-            html = bypassHtml;
-            doc = bypassDoc;
-          } else {
-            console.log('[Pages] cloudflare-bypass HTML still missing reader images');
+        const firecrawlData = await firecrawlResponse.json();
+        
+        if (firecrawlResponse.ok && firecrawlData.success) {
+          const firecrawlHtml = firecrawlData.data?.html || '';
+          console.log(`[Pages] Firecrawl returned ${firecrawlHtml.length} bytes`);
+          
+          if (firecrawlHtml.length > 1000) {
+            html = firecrawlHtml;
+            doc = new DOMParser().parseFromString(html, 'text/html');
+            
+            const readerImgs = doc?.querySelectorAll('#readerarea img, img.ts-main-image').length || 0;
+            console.log(`[Pages] Firecrawl HTML has ${readerImgs} reader images`);
           }
         } else {
-          console.log('[Pages] cloudflare-bypass returned empty/short HTML');
+          console.log(`[Pages] Firecrawl error:`, firecrawlData.error || 'Unknown error');
         }
+      } catch (e: any) {
+        console.log(`[Pages] Firecrawl exception:`, e?.message);
       }
+    } else {
+      console.log(`[Pages] Firecrawl API key not configured`);
     }
   }
+  
+  // Fallback to regular fetch if Firecrawl didn't work
+  if (!html || html.length < 1000) {
+    console.log(`[Pages] Using regular fetchHTML...`);
+    html = await fetchHTML(chapterUrl, config);
+    doc = new DOMParser().parseFromString(html, 'text/html');
+  }
+  
+  if (!doc) throw new Error('Failed to parse HTML');
 
   const pages: any[] = [];
 
