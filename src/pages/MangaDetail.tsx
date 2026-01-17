@@ -3,7 +3,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Star, BookOpen, Eye, Heart, Share2, Clock, Loader2, Image as ImageIcon } from "lucide-react";
+import { Star, BookOpen, Eye, Heart, Share2, Loader2, Clock, Image as ImageIcon } from "lucide-react";
+import { ChapterList } from "@/components/ChapterList";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -504,24 +505,11 @@ const MangaDetail = () => {
             </TabsList>
             
             <TabsContent value="chapters" className="mt-6">
-              {chapters.length > 0 ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {chapters.map((chapter) => (
-                    <ChapterCard 
-                      key={chapter.id}
-                      chapter={chapter}
-                      mangaSlug={manga.slug}
-                      formatDate={formatDate}
-                      formatViews={formatViews}
-                    />
-                  ))}
-                </div>
-              ) : (
-                <Card className="p-8 bg-card border-border text-center">
-                  <BookOpen className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                  <p className="text-muted-foreground">لا توجد فصول متاحة حالياً</p>
-                </Card>
-              )}
+              <ChapterList 
+                chapters={chapters} 
+                mangaSlug={manga.slug} 
+                mangaId={manga.id}
+              />
             </TabsContent>
             
             <TabsContent value="description" className="mt-6">
