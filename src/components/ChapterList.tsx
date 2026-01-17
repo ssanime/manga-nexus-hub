@@ -56,7 +56,8 @@ const formatDate = (date: string | null) => {
 export const ChapterList = ({ chapters, mangaSlug, mangaId }: ChapterListProps) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [showAll, setShowAll] = useState(false);
-  const [lastReadChapter, setLastReadChapter] = useState<number | null>(null);
+  const [readChapterIds, setReadChapterIds] = useState<Set<string>>(new Set());
+  const [lastReadChapterId, setLastReadChapterId] = useState<string | null>(null);
   const [user, setUser] = useState<any>(null);
   const INITIAL_DISPLAY = 20;
 
@@ -67,27 +68,26 @@ export const ChapterList = ({ chapters, mangaSlug, mangaId }: ChapterListProps) 
       setUser(user);
       
       if (user && mangaId) {
+        // Fetch all reading history for this manga
         const { data } = await supabase
           .from('reading_history')
-          .select('chapter_id')
+          .select('chapter_id, updated_at')
           .eq('user_id', user.id)
           .eq('manga_id', mangaId)
-          .order('updated_at', { ascending: false })
-          .limit(1)
-          .maybeSingle();
+          .order('updated_at', { ascending: false });
         
-        if (data) {
-          // Find the chapter number from the chapter_id
-          const readChapter = chapters.find(c => c.id === data.chapter_id);
-          if (readChapter) {
-            setLastReadChapter(readChapter.chapter_number);
-          }
+        if (data && data.length > 0) {
+          // Set all read chapter IDs
+          const readIds = new Set(data.map(r => r.chapter_id));
+          setReadChapterIds(readIds);
+          // Set the last read chapter
+          setLastReadChapterId(data[0].chapter_id);
         }
       }
     };
 
     fetchUserAndHistory();
-  }, [mangaId, chapters, user?.id]);
+  }, [mangaId, user?.id]);
 
   // Filter and sort chapters
   const filteredChapters = useMemo(() => {
@@ -111,9 +111,11 @@ export const ChapterList = ({ chapters, mangaSlug, mangaId }: ChapterListProps) 
     ? chapters.reduce((max, c) => c.chapter_number > max.chapter_number ? c : max, chapters[0])
     : null;
 
-  const lastReadChapterData = lastReadChapter
-    ? chapters.find(c => c.chapter_number === lastReadChapter)
+  const lastReadChapterData = lastReadChapterId
+    ? chapters.find(c => c.id === lastReadChapterId)
     : null;
+  
+  const lastReadChapter = lastReadChapterData?.chapter_number || null;
 
   // Display chapters
   const displayedChapters = showAll 
@@ -201,7 +203,8 @@ export const ChapterList = ({ chapters, mangaSlug, mangaId }: ChapterListProps) 
       {/* Chapters Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {displayedChapters.map((chapter) => {
-          const isLastRead = lastReadChapter === chapter.chapter_number;
+          const isRead = readChapterIds.has(chapter.id);
+          const isLastRead = lastReadChapterId === chapter.id;
           const isLatest = latestChapter?.chapter_number === chapter.chapter_number;
           
           return (
@@ -218,20 +221,21 @@ export const ChapterList = ({ chapters, mangaSlug, mangaId }: ChapterListProps) 
               }`}>
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-3 flex-1 min-w-0">
+                    {/* Read/Unread Eye Indicator */}
                     <div className={`p-2 rounded-lg transition-colors ${
-                      isLastRead 
-                        ? 'bg-accent/20 group-hover:bg-accent/30' 
-                        : isLatest
-                          ? 'bg-green-500/20 group-hover:bg-green-500/30'
-                          : 'bg-primary/10 group-hover:bg-primary/20'
+                      isRead 
+                        ? 'bg-red-500/20' 
+                        : 'bg-muted'
                     }`}>
-                      <BookOpen className={`h-4 w-4 ${
-                        isLastRead ? 'text-accent' : isLatest ? 'text-green-500' : 'text-primary'
+                      <Eye className={`h-4 w-4 transition-colors ${
+                        isRead ? 'text-red-500' : 'text-muted-foreground'
                       }`} />
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <h3 className="font-semibold text-foreground group-hover:text-primary transition-colors">
+                        <h3 className={`font-semibold group-hover:text-primary transition-colors ${
+                          isRead ? 'text-muted-foreground' : 'text-foreground'
+                        }`}>
                           الفصل {chapter.chapter_number}
                         </h3>
                         {isLastRead && (

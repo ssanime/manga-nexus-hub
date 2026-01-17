@@ -205,7 +205,7 @@ async function loadScraperConfig(supabase: any, sourceName: string) {
       selectors: {
         title: [".author-info-title h1", ".series-title", "h1.text-white", "h1", ".manga-title"],
         cover: [".whitebox img.shadow-sm", ".series-thumb img", ".text-right img", "img[alt*='Manga']", ".cover img", "img.img-fluid"],
-        description: [".review-author-info", ".series-synops", ".description p", ".manga-description", ".summary p"],
+        description: [".review-content p", ".review-author-info", ".series-synops", ".description p", ".manga-description", ".summary p"],
         status: [".full-list-info small a[href*='status']", ".status-badge", ".status", ".manga-status"],
         genres: [".review-author-info a.subtitle", ".genres a", "a[href*='genre']", ".genre a", ".tag a"],
         author: [".full-list-info small a[href*='author']", ".author a", ".author"],

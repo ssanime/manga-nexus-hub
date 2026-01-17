@@ -163,6 +163,51 @@ const Reader = () => {
     loadChapterData();
   }, [mangaId, chapterId]);
 
+  // Track reading history and views
+  const trackReadingProgress = async (mangaData: any, chapterData: any) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    if (user) {
+      // Check if already in reading history
+      const { data: existingHistory } = await supabase
+        .from('reading_history')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('manga_id', mangaData.id)
+        .eq('chapter_id', chapterData.id)
+        .maybeSingle();
+      
+      if (existingHistory) {
+        // Update existing entry
+        await supabase
+          .from('reading_history')
+          .update({ updated_at: new Date().toISOString() })
+          .eq('id', existingHistory.id);
+      } else {
+        // Insert new entry and increment views only for first time
+        await supabase
+          .from('reading_history')
+          .insert({
+            user_id: user.id,
+            manga_id: mangaData.id,
+            chapter_id: chapterData.id,
+          });
+        
+        // Increment chapter views only once per user
+        await supabase
+          .from('chapters')
+          .update({ views: (chapterData.views || 0) + 1 })
+          .eq('id', chapterData.id);
+        
+        // Increment manga views only once per user per chapter
+        await supabase
+          .from('manga')
+          .update({ views: (mangaData.views || 0) + 1 })
+          .eq('id', mangaData.id);
+      }
+    }
+  };
+
   const loadChapterData = async () => {
     try {
       setLoading(true);
@@ -218,6 +263,9 @@ const Reader = () => {
       }
 
       setChapter(chapterData);
+      
+      // Track reading progress and views
+      await trackReadingProgress(mangaData, chapterData);
 
       // Get chapter pages
       const { data: pagesData, error: pagesError } = await supabase
