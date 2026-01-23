@@ -1,21 +1,27 @@
-import { Navbar } from "@/components/Navbar";
-import { HeroSection } from "@/components/HeroSection";
-import { MangaCarousel } from "@/components/MangaCarousel";
-import { LatestChapters } from "@/components/LatestChapters";
-import { LatestWorks } from "@/components/LatestWorks";
-import { Button } from "@/components/ui/button";
-import { Settings, ArrowRight, Flame, TrendingUp, Clock, Sparkles } from "lucide-react";
-import { useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
+import { Settings } from "lucide-react";
+import { motion } from "framer-motion";
+import { supabase } from "@/integrations/supabase/client";
+import { Button } from "@/components/ui/button";
+import { Navbar } from "@/components/Navbar";
+import { AnimatedHero } from "@/components/home/AnimatedHero";
+import { BentoGrid, PopularSection, TrendingSection } from "@/components/home/BentoGrid";
+import { QuickAccessCards } from "@/components/home/QuickAccessCards";
+import { LatestChaptersGrid } from "@/components/home/LatestChaptersGrid";
+import { StatsSection } from "@/components/home/StatsSection";
+import { Footer } from "@/components/home/Footer";
 
 const Index = () => {
   const navigate = useNavigate();
   const [isAdmin, setIsAdmin] = useState(false);
+  const [popularManga, setPopularManga] = useState<any[]>([]);
+  const [trendingManga, setTrendingManga] = useState<any[]>([]);
+  const [newReleases, setNewReleases] = useState<any[]>([]);
 
   useEffect(() => {
     checkAdminRole();
+    fetchManga();
   }, []);
 
   const checkAdminRole = async () => {
@@ -32,134 +38,102 @@ const Index = () => {
     }
   };
 
-  const [popularManga, setPopularManga] = useState<any[]>([]);
-  const [trendingManga, setTrendingManga] = useState<any[]>([]);
-
-  useEffect(() => {
-    fetchManga();
-  }, []);
-
   const fetchManga = async () => {
-    // Fetch popular manga (most viewed/rated)
+    // Fetch popular manga (most viewed)
     const { data: popular } = await supabase
       .from('manga')
-      .select('*')
+      .select('id, slug, title, cover_url, rating, views, genres')
       .eq('publish_status', 'published')
-      .order('created_at', { ascending: false })
+      .order('views', { ascending: false })
       .limit(20);
     
-    // Fetch trending manga
+    // Fetch trending manga (recently updated with high views)
     const { data: trending } = await supabase
       .from('manga')
-      .select('*')
+      .select('id, slug, title, cover_url, rating, views, genres')
+      .eq('publish_status', 'published')
+      .order('updated_at', { ascending: false })
+      .limit(20);
+
+    // Fetch new releases
+    const { data: newData } = await supabase
+      .from('manga')
+      .select('id, slug, title, cover_url, rating, views, genres')
       .eq('publish_status', 'published')
       .order('created_at', { ascending: false })
       .limit(20);
     
     if (popular) setPopularManga(popular);
     if (trending) setTrendingManga(trending);
+    if (newData) setNewReleases(newData);
   };
 
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
       
+      {/* Admin FAB */}
       {isAdmin && (
-        <div className="fixed bottom-8 left-8 z-50">
+        <motion.div 
+          initial={{ scale: 0, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          className="fixed bottom-8 left-8 z-50"
+        >
           <Button 
             onClick={() => navigate('/admin')}
             size="lg"
-            className="shadow-lg"
+            className="shadow-lg shadow-primary/30 gap-2"
           >
-            <Settings className="w-5 h-5 mr-2" />
+            <Settings className="w-5 h-5" />
             لوحة التحكم
           </Button>
-        </div>
+        </motion.div>
       )}
       
-      <HeroSection />
+      {/* Hero Section with Animated Carousel */}
+      <AnimatedHero />
 
-      {/* Popular Manga - Large Carousel */}
-      <section className="container mx-auto px-4 py-12">
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-3">
-            <Flame className="h-7 w-7 text-primary" />
-            <h2 className="text-3xl font-bold text-foreground">الأعمال الشعبية</h2>
-          </div>
-          <Link to="/popular">
-            <Button variant="ghost" className="group">
-              عرض الكل
-              <ArrowRight className="mr-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
-            </Button>
-          </Link>
-        </div>
-        <MangaCarousel manga={popularManga} size="large" />
-      </section>
+      {/* Quick Access Cards */}
+      <div className="container mx-auto px-4">
+        <QuickAccessCards />
+      </div>
 
-      {/* Trending - Medium Carousel */}
-      <section className="container mx-auto px-4 py-12 bg-card/30">
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-3">
-            <TrendingUp className="h-7 w-7 text-accent" />
-            <h2 className="text-3xl font-bold text-foreground">الأعمال الرائجة</h2>
-          </div>
-          <Link to="/browse">
-            <Button variant="ghost" className="group">
-              عرض الكل
-              <ArrowRight className="mr-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
-            </Button>
-          </Link>
-        </div>
-        <MangaCarousel manga={trendingManga} size="medium" />
-      </section>
+      {/* Stats Section */}
+      <div className="container mx-auto px-4">
+        <StatsSection />
+      </div>
 
-      {/* Latest Works */}
-      <section className="container mx-auto px-4 py-12">
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-3">
-            <Sparkles className="h-7 w-7 text-primary" />
-            <h2 className="text-3xl font-bold text-foreground">آخر الأعمال</h2>
-          </div>
+      {/* Popular Manga - Large Grid */}
+      <div className="container mx-auto px-4">
+        <PopularSection items={popularManga} />
+      </div>
+
+      {/* Trending - Medium Grid with Background */}
+      <div className="bg-card/30">
+        <div className="container mx-auto px-4">
+          <TrendingSection items={trendingManga} />
         </div>
-        <LatestWorks />
-      </section>
+      </div>
+
+      {/* New Releases */}
+      <div className="container mx-auto px-4">
+        <BentoGrid
+          title="إصدارات جديدة"
+          icon={<motion.span whileHover={{ rotate: 15 }}>✨</motion.span>}
+          items={newReleases}
+          variant="medium"
+        />
+      </div>
 
       {/* Latest Chapters */}
-      <section className="container mx-auto px-4 py-12 bg-card/30">
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-3">
-            <Clock className="h-7 w-7 text-primary" />
-            <h2 className="text-3xl font-bold text-foreground">آخر الفصول</h2>
-          </div>
-          <Link to="/recent">
-            <Button variant="ghost" className="group">
-              عرض الكل
-              <ArrowRight className="mr-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
-            </Button>
-          </Link>
+      <div className="bg-card/20">
+        <div className="container mx-auto px-4">
+          <LatestChaptersGrid />
         </div>
-        <LatestChapters />
-      </section>
+      </div>
 
       {/* Footer */}
-      <footer className="border-t border-border bg-card/50 py-12">
-        <div className="container mx-auto px-4">
-          <div className="flex flex-col items-center justify-center gap-4 text-center">
-            <div className="flex items-center gap-2">
-              <img src="/placeholder.svg" alt="Mangafas" className="h-8 w-8" />
-              <span className="text-2xl font-bold bg-manga-gradient bg-clip-text text-transparent">
-                Mangafas
-              </span>
-            </div>
-            <p className="text-muted-foreground">
-              أفضل موقع لقراءة المانجا والمانهوا مترجمة للعربية
-            </p>
-            <p className="text-sm text-muted-foreground">
-              © 2024 Mangafas. جميع الحقوق محفوظة.
-            </p>
-          </div>
-        </div>
-      </footer>
+      <Footer />
     </div>
   );
 };
