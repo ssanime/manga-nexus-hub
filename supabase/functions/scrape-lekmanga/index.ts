@@ -181,22 +181,48 @@ async function loadScraperConfig(supabase: any, sourceName: string) {
     "azoramoon": {
       baseUrl: "https://azoramoon.com",
       selectors: {
-        title: [".post-title h1", "h1.entry-title", ".series-title", ".entry-title", "h1"],
-        cover: [".series-thumb img", ".summary_image img", "img.wp-post-image", ".thumb img", ".cover img"],
+        // معلومات المانجا - تحديث 2026
+        title: [".post-title h1", "h1.entry-title", ".series-title", ".entry-title", "h1", "meta[property='og:title']"],
+        cover: [".series-thumb img", ".summary_image img", "img.wp-post-image", ".thumb img", ".cover img", "meta[property='og:image']"],
         description: [".entry-content[itemprop='description'] p", ".series-synops", ".summary__content p", ".description", ".manga-description"],
         status: [".status .summary-content", ".series-status", ".spe span:last-child", ".manga-status"],
         genres: [".series-genres a", ".genres-content a", ".mgen a", "a[rel='tag']"],
         author: [".author-content", ".series-author", ".fmed b", ".author"],
         artist: [".artist-content", ".series-artist", ".artist"],
         rating: [".num[itemprop='ratingValue']", ".rating .num", ".series-rating", "[itemprop='ratingValue']"],
-        chapters: [".eplister ul li", "li.wp-manga-chapter", ".chapter-item"],
-        chapterTitle: ["a .chapternum", "a", ".chapternum"],
-        chapterUrl: ["a"],
-        chapterDate: [".chapterdate", ".chapter-release-date"],
-        pageImages: ["#readerarea img", ".rdminimal img", ".reading-content img", "img.wp-manga-chapter-img"],
+        // الفصول - تحديث 2026: هيكل جديد مع flex و items-center
+        chapters: [
+          "a.flex.w-full.items-center", // الهيكل الجديد: <a class="flex w-full items-center...">
+          "a[href*='/chapter-']", // روابط الفصول
+          ".eplister ul li", 
+          "li.wp-manga-chapter", 
+          ".chapter-item"
+        ],
+        chapterTitle: [
+          ".text-xs.font-medium", // <span class="text-xs sm:text-sm font-medium">الفصل 15</span>
+          "span.text-sm.font-medium",
+          "a .chapternum", 
+          ".chapternum",
+          "a"
+        ],
+        chapterUrl: ["a[href*='/chapter-']", "a"],
+        chapterDate: [
+          "time[datetime]", // <time datetime="8 days">8 أيام</time>
+          ".chapterdate", 
+          ".chapter-release-date"
+        ],
+        // صور الفصل - تحديث 2026: data-image-index attribute
+        pageImages: [
+          "img[data-image-index]", // <img data-image-index="1" src="...">
+          "img[src*='storage.azoramoon.com']", // الصور من storage
+          "#readerarea img", 
+          ".rdminimal img", 
+          ".reading-content img", 
+          "img.wp-manga-chapter-img"
+        ],
         year: [".fmed:contains('Released') b", ".year", ".release-year"],
         catalogMangaCard: [".bs", ".bsx", ".listupd .bs", ".listupd article", ".page-item-detail"],
-        catalogMangaLink: [".bsx a", "a"],
+        catalogMangaLink: [".bsx a", "a[href*='/series/']", "a"],
         catalogMangaCover: [".limit img", "img"]
       }
     },
@@ -244,12 +270,12 @@ async function loadScraperConfig(supabase: any, sourceName: string) {
         catalogMangaCover: [".item-thumb img", "img.wp-post-image", "img"]
       }
     },
-    // NEW: Lavatoons.com - Madara WordPress Theme with eplister chapters
+    // NEW: Lavatoons.com - تحديث 2026 مع ch-main-anchor و ts-main-image curdown
     "lavatoons": {
       baseUrl: "https://lavatoons.com",
       selectors: {
         // معلومات المانجا - Madara Theme
-        title: [".post-title h1", "h1", ".entry-title", ".manga-title"],
+        title: [".post-title h1", "h1", ".entry-title", ".manga-title", "meta[property='og:title']"],
         cover: [".summary_image img", ".summary_image a img", "img.img-responsive", ".tab-summary img", "meta[property='og:image']"],
         description: [".description-summary .summary__content", ".manga-excerpt", ".summary__content p", ".entry-content p"],
         status: [".post-content_item:contains('الحالة') .summary-content", ".post-status .summary-content", ".status"],
@@ -257,13 +283,38 @@ async function loadScraperConfig(supabase: any, sourceName: string) {
         author: [".author-content a", ".author-content", "a[href*='manga-author']"],
         artist: [".artist-content a", ".artist-content", "a[href*='manga-artist']"],
         rating: [".score", ".post-total-rating .score", "[property='ratingValue']", "#averagerate"],
-        // قائمة الفصول - eplister style (lavatoons specific)
-        chapters: ["#chapterlist ul li[data-num]", ".eplister ul li[data-num]", ".eplister ul li", "li.wp-manga-chapter", "ul.main.version-chap li"],
-        chapterTitle: ["span.chapternum", ".chapternum", "a", ".chapter-manhwa-title"],
-        chapterUrl: ["a"],
-        chapterDate: ["span.chapterdate", ".chapterdate", ".chapter-release-date i", ".chapter-release-date"],
-        // صور الفصل - ts-main-image class specific to lavatoons reader
-        pageImages: ["#readerarea img.ts-main-image", "#readerarea img", "img.ts-main-image", ".reading-content img", ".page-break img", "img.wp-manga-chapter-img"],
+        // قائمة الفصول - تحديث 2026: ch-main-anchor style
+        chapters: [
+          "a.ch-main-anchor", // الهيكل الجديد: <a href="..." class="ch-main-anchor">
+          "#chapterlist ul li[data-num]", 
+          ".eplister ul li[data-num]", 
+          ".eplister ul li", 
+          "li.wp-manga-chapter"
+        ],
+        chapterTitle: [
+          ".ch-num", // <span class="ch-num">فصل 125</span>
+          "span.chapternum", 
+          ".chapternum", 
+          "a"
+        ],
+        chapterUrl: ["a.ch-main-anchor", "a"],
+        chapterDate: [
+          ".ch-date", // <span class="ch-date">2025/12/22</span>
+          "span.chapterdate", 
+          ".chapterdate", 
+          ".chapter-release-date"
+        ],
+        // صور الفصل - تحديث 2026: ts-main-image curdown with data-index
+        pageImages: [
+          "img.ts-main-image.curdown", // <img class="ts-main-image curdown" data-index="1" src="...">
+          "img.ts-main-image[data-index]",
+          "img[data-server]", // img with data-server attribute
+          "#readerarea img.ts-main-image", 
+          "#readerarea img", 
+          "img.ts-main-image", 
+          ".reading-content img", 
+          ".page-break img"
+        ],
         year: [".post-content_item:contains('السنة') .summary-content", ".release-year"],
         // الكتالوج
         catalogMangaCard: [".page-item-detail", ".manga-item", ".c-tabs-item__content", "article.post"],
@@ -283,11 +334,33 @@ async function loadScraperConfig(supabase: any, sourceName: string) {
         author: [".author-content a", ".author-content"],
         artist: [".artist-content a", ".artist-content"],
         rating: [".score", ".post-total-rating .score", "[property='ratingValue']"],
-        chapters: ["#chapterlist ul li[data-num]", ".eplister ul li[data-num]", "li.wp-manga-chapter"],
-        chapterTitle: ["span.chapternum", ".chapternum", "a"],
-        chapterUrl: ["a"],
-        chapterDate: ["span.chapterdate", ".chapterdate", ".chapter-release-date i"],
-        pageImages: ["#readerarea img.ts-main-image", "#readerarea img", "img.ts-main-image", ".reading-content img", ".page-break img"],
+        chapters: ["a.ch-main-anchor", "#chapterlist ul li[data-num]", ".eplister ul li[data-num]", "li.wp-manga-chapter"],
+        chapterTitle: [".ch-num", "span.chapternum", ".chapternum", "a"],
+        chapterUrl: ["a.ch-main-anchor", "a"],
+        chapterDate: [".ch-date", "span.chapterdate", ".chapterdate", ".chapter-release-date i"],
+        pageImages: ["img.ts-main-image.curdown", "img.ts-main-image[data-index]", "#readerarea img.ts-main-image", "#readerarea img", "img.ts-main-image", ".reading-content img"],
+        catalogMangaCard: [".page-item-detail", ".manga-item"],
+        catalogMangaLink: [".item-thumb a", ".post-title a"],
+        catalogMangaCover: [".item-thumb img", "img"]
+      }
+    },
+    // lavascans.com - نفس lavatoons
+    "lavascans": {
+      baseUrl: "https://lavascans.com",
+      selectors: {
+        title: [".post-title h1", "h1", ".entry-title", ".manga-title"],
+        cover: [".summary_image img", ".summary_image a img", "img.img-responsive", ".tab-summary img"],
+        description: [".description-summary .summary__content", ".manga-excerpt", ".summary__content p"],
+        status: [".post-content_item:contains('الحالة') .summary-content", ".post-status .summary-content"],
+        genres: [".genres-content a", ".tags-content a", "a[rel='tag']"],
+        author: [".author-content a", ".author-content"],
+        artist: [".artist-content a", ".artist-content"],
+        rating: [".score", ".post-total-rating .score", "[property='ratingValue']"],
+        chapters: ["a.ch-main-anchor", "#chapterlist ul li[data-num]", ".eplister ul li[data-num]", "li.wp-manga-chapter"],
+        chapterTitle: [".ch-num", "span.chapternum", ".chapternum", "a"],
+        chapterUrl: ["a.ch-main-anchor", "a"],
+        chapterDate: [".ch-date", "span.chapterdate", ".chapterdate", ".chapter-release-date i"],
+        pageImages: ["img.ts-main-image.curdown", "img.ts-main-image[data-index]", "#readerarea img.ts-main-image", "#readerarea img", "img.ts-main-image", ".reading-content img"],
         catalogMangaCard: [".page-item-detail", ".manga-item"],
         catalogMangaLink: [".item-thumb a", ".post-title a"],
         catalogMangaCover: [".item-thumb img", "img"]
@@ -1042,19 +1115,20 @@ async function scrapeChapters(mangaUrl: string, source: string, supabase: any) {
     return chapters;
   }
   
-  // Special handling for lavatoons - eplister chapters with data-num
-  if (sourceLower === 'lavatoons' || sourceLower === 'lavatoons.com') {
-    console.log(`[Chapters] Using lavatoons eplister chapter extraction method`);
+  // Special handling for azoramoon - تحديث 2026: flex w-full items-center structure
+  const isAzoramoon = sourceLower === 'azoramoon' || sourceLower === 'azoramoon.com' || mangaUrl.includes('azoramoon.com');
+  if (isAzoramoon) {
+    console.log(`[Chapters] Using azoramoon 2026 chapter extraction method`);
     
-    // Try eplister selectors - lavatoons uses li[data-num] structure
-    const eplisterSelectors = [
-      '#chapterlist ul li[data-num]',
-      '.eplister ul li[data-num]',
-      'div.eplister ul li',
-      '#chapterlist li'
+    // الهيكل الجديد: <a class="flex w-full items-center..." href="/series/.../chapter-15">
+    const azoramoonSelectors = [
+      'a.flex.w-full.items-center[href*="/chapter"]',
+      'a[href*="/chapter-"]',
+      'a[href*="/series/"][href*="/chapter"]',
+      '.eplister ul li a'
     ];
     
-    for (const selector of eplisterSelectors) {
+    for (const selector of azoramoonSelectors) {
       const chapterElements = doc.querySelectorAll(selector);
       if (chapterElements.length > 0) {
         console.log(`[Chapters] Found ${chapterElements.length} chapters with: ${selector}`);
@@ -1062,27 +1136,28 @@ async function scrapeChapters(mangaUrl: string, source: string, supabase: any) {
         for (let i = 0; i < chapterElements.length; i++) {
           const chapterEl = chapterElements[i] as any;
           try {
-            // Get chapter number from data-num attribute
-            const dataNum = chapterEl.getAttribute('data-num');
-            let chapterNumber = dataNum ? parseFloat(dataNum) : 0;
+            // Get URL from href
+            let chapterUrl = chapterEl.getAttribute('href') || '';
             
-            // Get URL from anchor tag
-            const linkEl = chapterEl.querySelector('a');
-            let chapterUrl = linkEl?.getAttribute('href') || '';
-            
-            if (!chapterUrl) {
-              console.log(`[Chapters] ⚠️ No URL for chapter ${dataNum}`);
+            if (!chapterUrl || !chapterUrl.includes('chapter')) {
               continue;
             }
             
-            // Get title from span.chapternum
-            let title = '';
-            const chapterNumEl = chapterEl.querySelector('span.chapternum, .chapternum');
-            if (chapterNumEl) {
-              title = chapterNumEl.textContent?.trim().replace(/\s+/g, ' ') || '';
+            // Extract chapter number from URL: /chapter-15 or /chapter/15
+            let chapterNumber = 0;
+            const urlMatch = chapterUrl.match(/chapter[_-]?(\d+\.?\d*)/i);
+            if (urlMatch) {
+              chapterNumber = parseFloat(urlMatch[1]);
             }
             
-            // Extract chapter number from title if not in data-num
+            // Get title from .text-xs.font-medium or similar
+            let title = '';
+            const titleEl = chapterEl.querySelector('.text-xs.font-medium, .text-sm.font-medium, span[class*="font-medium"]');
+            if (titleEl) {
+              title = titleEl.textContent?.trim() || '';
+            }
+            
+            // Extract chapter number from title if not from URL
             if (chapterNumber === 0 && title) {
               const numMatch = title.match(/(\d+\.?\d*)/);
               if (numMatch) {
@@ -1090,7 +1165,146 @@ async function scrapeChapters(mangaUrl: string, source: string, supabase: any) {
               }
             }
             
-            // Fallback: extract from URL
+            // Get date from <time datetime="...">
+            let dateText = '';
+            const timeEl = chapterEl.querySelector('time[datetime]');
+            if (timeEl) {
+              dateText = timeEl.getAttribute('datetime') || timeEl.textContent?.trim() || '';
+            }
+            
+            // Parse relative date (e.g., "8 days" or "8 أيام")
+            let releaseDate = null;
+            if (dateText) {
+              // Try to parse "X days" format
+              const daysMatch = dateText.match(/(\d+)\s*(?:days?|أيام|يوم)/i);
+              if (daysMatch) {
+                const daysAgo = parseInt(daysMatch[1]);
+                const date = new Date();
+                date.setDate(date.getDate() - daysAgo);
+                releaseDate = date.toISOString().split('T')[0];
+              } else {
+                releaseDate = parseArabicDate(dateText);
+              }
+            }
+            
+            // Normalize URL
+            if (!chapterUrl.startsWith('http')) {
+              if (chapterUrl.startsWith('//')) {
+                chapterUrl = 'https:' + chapterUrl;
+              } else if (chapterUrl.startsWith('/')) {
+                chapterUrl = 'https://azoramoon.com' + chapterUrl;
+              } else {
+                chapterUrl = 'https://azoramoon.com/' + chapterUrl;
+              }
+            }
+            
+            // Avoid duplicates
+            const exists = chapters.some(c => c.chapter_number === chapterNumber);
+            if (!exists && chapterNumber > 0) {
+              chapters.push({
+                chapter_number: chapterNumber,
+                title: title || `الفصل ${chapterNumber}`,
+                source_url: chapterUrl,
+                release_date: releaseDate,
+              });
+              
+              console.log(`[Chapters] ✓ Chapter ${chapterNumber}: ${title?.substring(0, 30) || 'N/A'}`);
+            }
+          } catch (e: any) {
+            console.error(`[Chapters] Error processing azoramoon chapter ${i + 1}:`, e?.message || e);
+          }
+        }
+        
+        if (chapters.length > 0) break;
+      }
+    }
+    
+    if (chapters.length > 0) {
+      chapters.sort((a, b) => a.chapter_number - b.chapter_number);
+      console.log(`[Chapters] Success: ${chapters.length} chapters for azoramoon`);
+      return chapters;
+    }
+    
+    console.log(`[Chapters] ⚠️ No azoramoon chapters found, trying standard selectors...`);
+  }
+  
+  // Special handling for lavatoons - تحديث 2026: ch-main-anchor structure
+  if (sourceLower === 'lavatoons' || sourceLower === 'lavatoons.com' || sourceLower === 'lavascans' || mangaUrl.includes('lavatoons.com') || mangaUrl.includes('lavascans.com')) {
+    console.log(`[Chapters] Using lavatoons 2026 chapter extraction method`);
+    
+    // الهيكل الجديد: <a href="..." class="ch-main-anchor">
+    const lavatoonsSelectors = [
+      'a.ch-main-anchor',
+      '#chapterlist ul li[data-num]',
+      '.eplister ul li[data-num]',
+      'div.eplister ul li',
+      '#chapterlist li'
+    ];
+    
+    for (const selector of lavatoonsSelectors) {
+      const chapterElements = doc.querySelectorAll(selector);
+      if (chapterElements.length > 0) {
+        console.log(`[Chapters] Found ${chapterElements.length} chapters with: ${selector}`);
+        
+        for (let i = 0; i < chapterElements.length; i++) {
+          const chapterEl = chapterElements[i] as any;
+          try {
+            let chapterUrl = '';
+            let chapterNumber = 0;
+            let title = '';
+            let dateText = '';
+            
+            // Handle a.ch-main-anchor directly
+            if (chapterEl.tagName === 'A' && chapterEl.classList?.contains('ch-main-anchor')) {
+              chapterUrl = chapterEl.getAttribute('href') || '';
+              
+              // Get title from .ch-num
+              const chNumEl = chapterEl.querySelector('.ch-num');
+              if (chNumEl) {
+                title = chNumEl.textContent?.trim() || '';
+              }
+              
+              // Get date from .ch-date
+              const chDateEl = chapterEl.querySelector('.ch-date');
+              if (chDateEl) {
+                dateText = chDateEl.textContent?.trim() || '';
+              }
+            } else {
+              // Handle li[data-num] structure
+              const dataNum = chapterEl.getAttribute('data-num');
+              chapterNumber = dataNum ? parseFloat(dataNum) : 0;
+              
+              const linkEl = chapterEl.querySelector('a');
+              chapterUrl = linkEl?.getAttribute('href') || '';
+              
+              const chapterNumEl = chapterEl.querySelector('span.chapternum, .chapternum, .ch-num');
+              if (chapterNumEl) {
+                title = chapterNumEl.textContent?.trim().replace(/\s+/g, ' ') || '';
+              }
+              
+              const dateEl = chapterEl.querySelector('span.chapterdate, .chapterdate, .ch-date');
+              if (dateEl) {
+                dateText = dateEl.textContent?.trim() || '';
+              }
+            }
+            
+            if (!chapterUrl) {
+              continue;
+            }
+            
+            // Extract chapter number from title or URL
+            if (chapterNumber === 0 && title) {
+              const numMatch = title.match(/(?:فصل|chapter)[^\d]*(\d+\.?\d*)/i);
+              if (numMatch) {
+                chapterNumber = parseFloat(numMatch[1]);
+              } else {
+                const simpleNumMatch = title.match(/(\d+\.?\d*)/);
+                if (simpleNumMatch) {
+                  chapterNumber = parseFloat(simpleNumMatch[1]);
+                }
+              }
+            }
+            
             if (chapterNumber === 0) {
               const urlMatch = chapterUrl.match(/chapter[_-]?(\d+\.?\d*)/i);
               if (urlMatch) {
@@ -1098,14 +1312,16 @@ async function scrapeChapters(mangaUrl: string, source: string, supabase: any) {
               }
             }
             
-            // Get date from span.chapterdate
-            let dateText = '';
-            const dateEl = chapterEl.querySelector('span.chapterdate, .chapterdate');
-            if (dateEl) {
-              dateText = dateEl.textContent?.trim() || '';
+            // Parse date (format: 2025/12/22)
+            let releaseDate = null;
+            if (dateText) {
+              const dateMatch = dateText.match(/(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+              if (dateMatch) {
+                releaseDate = `${dateMatch[1]}-${dateMatch[2].padStart(2, '0')}-${dateMatch[3].padStart(2, '0')}`;
+              } else {
+                releaseDate = parseArabicDate(dateText);
+              }
             }
-            
-            const releaseDate = parseArabicDate(dateText);
             
             // Normalize URL
             if (!chapterUrl.startsWith('http')) {
@@ -1118,20 +1334,24 @@ async function scrapeChapters(mangaUrl: string, source: string, supabase: any) {
               }
             }
             
-            chapters.push({
-              chapter_number: chapterNumber || (chapterElements.length - i),
-              title: title || `الفصل ${chapterNumber}`,
-              source_url: chapterUrl,
-              release_date: releaseDate,
-            });
-            
-            console.log(`[Chapters] ✓ Chapter ${chapterNumber}: ${title?.substring(0, 30) || 'N/A'}`);
+            // Avoid duplicates
+            const exists = chapters.some(c => c.chapter_number === chapterNumber);
+            if (!exists && chapterNumber > 0) {
+              chapters.push({
+                chapter_number: chapterNumber,
+                title: title || `الفصل ${chapterNumber}`,
+                source_url: chapterUrl,
+                release_date: releaseDate,
+              });
+              
+              console.log(`[Chapters] ✓ Chapter ${chapterNumber}: ${title?.substring(0, 30) || 'N/A'}`);
+            }
           } catch (e: any) {
             console.error(`[Chapters] Error processing lavatoons chapter ${i + 1}:`, e?.message || e);
           }
         }
         
-        break; // Found chapters
+        if (chapters.length > 0) break;
       }
     }
     
@@ -1141,7 +1361,7 @@ async function scrapeChapters(mangaUrl: string, source: string, supabase: any) {
       return chapters;
     }
     
-    console.log(`[Chapters] ⚠️ No eplister chapters found, trying standard selectors...`);
+    console.log(`[Chapters] ⚠️ No lavatoons chapters found, trying standard selectors...`);
   }
   
   // Special handling for meshmanga.com - uses "الفصل: XX" format
@@ -1451,16 +1671,36 @@ async function scrapeChapterPages(chapterUrl: string, source: string, supabase: 
   if (!config) throw new Error(`Unknown source: ${source}. Please add it in Sources Manager first.`);
 
   const sourceLower = (source || '').toLowerCase();
-  const isLavatoons = sourceLower.includes('lavatoons') || chapterUrl.includes('lavatoons.com');
+  const isLavatoons = sourceLower.includes('lavatoons') || sourceLower.includes('lavascans') || chapterUrl.includes('lavatoons.com') || chapterUrl.includes('lavascans.com');
   const isMeshmanga = sourceLower.includes('meshmanga') || chapterUrl.includes('meshmanga.com');
+  const isAzoramoon = sourceLower.includes('azoramoon') || chapterUrl.includes('azoramoon.com');
 
   // Ensure selectors shape
   config.selectors = config.selectors || {};
   config.selectors.pageImages = Array.isArray(config.selectors.pageImages) ? config.selectors.pageImages : [];
 
-  // lavatoons: dynamic DB config may not include correct reader selectors
+  // lavatoons: تحديث 2026 - ts-main-image curdown with data-index
   if (isLavatoons) {
-    const forced = ['#readerarea img.ts-main-image', '#readerarea img', 'img.ts-main-image'];
+    const forced = [
+      'img.ts-main-image.curdown',
+      'img.ts-main-image[data-index]',
+      'img[data-server]',
+      '#readerarea img.ts-main-image', 
+      '#readerarea img', 
+      'img.ts-main-image'
+    ];
+    config.selectors.pageImages = Array.from(new Set([...forced, ...config.selectors.pageImages]));
+  }
+  
+  // azoramoon: تحديث 2026 - data-image-index attribute and storage.azoramoon.com
+  if (isAzoramoon) {
+    const forced = [
+      'img[data-image-index]',
+      'img[src*="storage.azoramoon.com"]',
+      '#readerarea img',
+      '.rdminimal img',
+      '.reading-content img'
+    ];
     config.selectors.pageImages = Array.from(new Set([...forced, ...config.selectors.pageImages]));
   }
   
@@ -1537,8 +1777,9 @@ async function scrapeChapterPages(chapterUrl: string, source: string, supabase: 
 
   const isLavatoonsChapterPageImage = (u: string) => {
     // Example: /wp-content/uploads/manga/943a9860/001.jpg
-    // We only accept numeric page filenames to avoid covers/logos that might live in the same folder.
-    return /\/wp-content\/uploads\/manga\/[^"'\s<>]+\/\d{1,4}\.(?:jpg|jpeg|png|webp|gif)(?:\?|$)/i.test(u);
+    // Also support lavascans.com URLs
+    return /\/wp-content\/uploads\/manga\/[^"'\s<>]+\/\d{1,4}\.(?:jpg|jpeg|png|webp|gif)(?:\?|$)/i.test(u) ||
+           /lavascans\.com\/wp-content\/uploads\/manga\/[^"'\s<>]+\/\d{1,4}\.(?:jpg|jpeg|png|webp|gif)/i.test(u);
   };
 
   const isMeshmangaChapterPageImage = (u: string) => {
@@ -1547,6 +1788,13 @@ async function scrapeChapterPages(chapterUrl: string, source: string, supabase: 
     return /appswat\.com\/v2\/media\/series\/[^"'\s<>]+\/chapters\/[^"'\s<>]+\/\d{4}\.(?:jpg|jpeg|png|webp|gif)/i.test(u) ||
            /\/v2\/media\/series\/[^"'\s<>]+\/chapters\/[^"'\s<>]+\/\d{4}\.(?:jpg|jpeg|png|webp|gif)/i.test(u);
   };
+  
+  const isAzoramoonChapterPageImage = (u: string) => {
+    // تحديث 2026: صور من storage.azoramoon.com
+    // Example: https://storage.azoramoon.com/public//upload/series/a-bad-example-of-a-perfect-curse/kGP8JsrsZz/02.webp
+    return /storage\.azoramoon\.com\/public\/+upload\/series\/[^"'\s<>]+\/\d{2,4}\.(?:jpg|jpeg|png|webp|gif)/i.test(u) ||
+           /storage\.azoramoon\.com\/[^"'\s<>]+\.\w+$/i.test(u);
+  };
 
   const addUrl = (rawUrl?: string | null) => {
     if (!rawUrl) return;
@@ -1554,7 +1802,7 @@ async function scrapeChapterPages(chapterUrl: string, source: string, supabase: 
     if (!cleanedUrl) return;
 
     if (cleanedUrl.startsWith('data:image')) return;
-    if (/(?:placeholder|logo|icon)/i.test(cleanedUrl)) return;
+    if (/(?:placeholder|logo|icon|avatar|banner)/i.test(cleanedUrl)) return;
 
     // lavatoons: الصفحة فيها صور كثيرة (لوغو/ثيم/غلاف/إعلانات). نسمح فقط بصور الفصل الحقيقية (رقمية).
     if (isLavatoons && !isLavatoonsChapterPageImage(cleanedUrl)) {
@@ -1563,6 +1811,11 @@ async function scrapeChapterPages(chapterUrl: string, source: string, supabase: 
     
     // meshmanga: نسمح فقط بصور الفصل من appswat.com CDN
     if (isMeshmanga && !isMeshmangaChapterPageImage(cleanedUrl)) {
+      return;
+    }
+    
+    // azoramoon: نسمح فقط بصور من storage.azoramoon.com
+    if (isAzoramoon && !isAzoramoonChapterPageImage(cleanedUrl)) {
       return;
     }
 
@@ -1599,40 +1852,50 @@ async function scrapeChapterPages(chapterUrl: string, source: string, supabase: 
   }
 
   // Method 2: Regex extraction
-  // For lavatoons we scope regex to #readerarea only to avoid picking theme images/covers.
-  if (urlSet.size === 0 || isLavatoons) {
+  // For lavatoons/azoramoon we scope regex to #readerarea only to avoid picking theme images/covers.
+  if (urlSet.size === 0 || isLavatoons || isAzoramoon) {
     console.log(`[Pages] Trying regex extraction...`);
 
-    const readerAreaMatch = isLavatoons
+    const readerAreaMatch = (isLavatoons || isAzoramoon)
       ? html.match(/<div[^>]+id=["']readerarea["'][^>]*>[\s\S]*?<\/div>/i)
       : null;
     const regexScopeHtml = readerAreaMatch?.[0] || html;
 
     const regexPatterns = isLavatoons
       ? [
-          // Absolute URLs (normal)
-          /https?:\/\/(?:www\.)?lavatoons\.com\/wp-content\/uploads\/manga\/[^"'\s<>]+?\/\d{1,4}\.(?:jpg|jpeg|png|webp|gif)(?:\?[^"'\s<>]*)?/gi,
+          // Absolute URLs (normal) - lavatoons and lavascans
+          /https?:\/\/(?:www\.)?(lavatoons|lavascans)\.com\/wp-content\/uploads\/manga\/[^"'\s<>]+?\/\d{1,4}\.(?:jpg|jpeg|png|webp|gif)(?:\?[^"'\s<>]*)?/gi,
           // Absolute URLs (JSON-escaped: https:\/\/lavatoons.com\/...)
-          /https?:\\\/\\\/(?:www\\\.)?lavatoons\.com\\\/wp-content\\\/uploads\\\/manga\\\/[^"'\s<>]+?\\\/\d{1,4}\.(?:jpg|jpeg|png|webp|gif)(?:\?[^"'\s<>]*)?/gi,
+          /https?:\\\/\\\/(?:www\\\.)?(?:lavatoons|lavascans)\.com\\\/wp-content\\\/uploads\\\/manga\\\/[^"'\s<>]+?\\\/\d{1,4}\.(?:jpg|jpeg|png|webp|gif)(?:\?[^"'\s<>]*)?/gi,
           // Relative URLs
           /\/wp-content\/uploads\/manga\/[^"'\s<>]+?\/\d{1,4}\.(?:jpg|jpeg|png|webp|gif)(?:\?[^"'\s<>]*)?/gi,
-          // Reader images in markup
+          // Reader images in markup - تحديث 2026: ts-main-image curdown
+          /<img[^>]+class="[^"]*ts-main-image[^"]*curdown[^"]*"[^>]+(?:src|data-src)="([^"]+)"/gi,
           /<img[^>]+class="[^"]*ts-main-image[^"]*"[^>]+(?:src|data-src)="([^"]+)"/gi,
         ]
-      : isMeshmanga
+      : isAzoramoon
         ? [
-            // meshmanga: صور من appswat.com CDN
-            /https?:\/\/appswat\.com\/v2\/media\/series\/[^"'\s<>]+\/chapters\/[^"'\s<>]+\/\d{4}\.(?:jpg|jpeg|png|webp|gif)/gi,
-            // أي صورة من meshmanga بنمط chapters/XXXX/YYYY.webp
-            /https?:\/\/[^"'\s<>]+\/v2\/media\/series\/[^"'\s<>]+\/chapters\/[^"'\s<>]+\/\d{4}\.(?:jpg|jpeg|png|webp|gif)/gi,
-            // صور w-full h-auto
-            /<img[^>]+class="[^"]*w-full[^"]*h-auto[^"]*"[^>]+src="([^"]+)"/gi,
+            // azoramoon تحديث 2026: صور من storage.azoramoon.com
+            /https?:\/\/storage\.azoramoon\.com\/public\/+upload\/series\/[^"'\s<>]+\/\d{2,4}\.(?:jpg|jpeg|png|webp|gif)/gi,
+            /https?:\/\/storage\.azoramoon\.com\/[^"'\s<>]+\.(?:jpg|jpeg|png|webp|gif)/gi,
+            // صور مع data-image-index
+            /<img[^>]+data-image-index=["']\d+["'][^>]+src="([^"]+)"/gi,
+            /<img[^>]+src="([^"]+)"[^>]+data-image-index=["']\d+["']/gi,
           ]
-        : [
-            /https?:\/\/[^"'\s<>]+\/wp-content\/uploads\/[^"'\s<>]+?\.(?:jpg|jpeg|png|webp|gif)(?:\?[^"'\s<>]*)?/gi,
-            /https?:\/\/[^"'\s<>]+\/manga\/[^"'\s<>]+?\.(?:jpg|jpeg|png|webp|gif)(?:\?[^"'\s<>]*)?/gi,
-            /<img[^>]+class="[^"]*ts-main-image[^"]*"[^>]+src="([^"]+)"/gi,
-          ];
+        : isMeshmanga
+          ? [
+              // meshmanga: صور من appswat.com CDN
+              /https?:\/\/appswat\.com\/v2\/media\/series\/[^"'\s<>]+\/chapters\/[^"'\s<>]+\/\d{4}\.(?:jpg|jpeg|png|webp|gif)/gi,
+              // أي صورة من meshmanga بنمط chapters/XXXX/YYYY.webp
+              /https?:\/\/[^"'\s<>]+\/v2\/media\/series\/[^"'\s<>]+\/chapters\/[^"'\s<>]+\/\d{4}\.(?:jpg|jpeg|png|webp|gif)/gi,
+              // صور w-full h-auto
+              /<img[^>]+class="[^"]*w-full[^"]*h-auto[^"]*"[^>]+src="([^"]+)"/gi,
+            ]
+          : [
+              /https?:\/\/[^"'\s<>]+\/wp-content\/uploads\/[^"'\s<>]+?\.(?:jpg|jpeg|png|webp|gif)(?:\?[^"'\s<>]*)?/gi,
+              /https?:\/\/[^"'\s<>]+\/manga\/[^"'\s<>]+?\.(?:jpg|jpeg|png|webp|gif)(?:\?[^"'\s<>]*)?/gi,
+              /<img[^>]+class="[^"]*ts-main-image[^"]*"[^>]+src="([^"]+)"/gi,
+            ];
 
     for (const pattern of regexPatterns) {
       const matches = regexScopeHtml.matchAll(pattern);
@@ -1640,7 +1903,7 @@ async function scrapeChapterPages(chapterUrl: string, source: string, supabase: 
         addUrl(match[1] || match[0]);
       }
 
-      if (urlSet.size > 0 && !isLavatoons && !isMeshmanga) {
+      if (urlSet.size > 0 && !isLavatoons && !isMeshmanga && !isAzoramoon) {
         console.log(`[Pages] Regex extracted ${urlSet.size} image URLs`);
         break;
       }
@@ -1649,6 +1912,32 @@ async function scrapeChapterPages(chapterUrl: string, source: string, supabase: 
     if (urlSet.size > 0) {
       console.log(`[Pages] Regex total unique URLs so far: ${urlSet.size}`);
     }
+  }
+  
+  // Method 3: Specific azoramoon extraction (storage.azoramoon.com images)
+  if (isAzoramoon && urlSet.size === 0) {
+    console.log(`[Pages] Trying azoramoon specific extraction...`);
+    
+    // البحث عن صور مع data-image-index attribute
+    const imgPattern = /src=["'](https?:\/\/storage\.azoramoon\.com\/[^"']+\.(?:jpg|jpeg|png|webp|gif))["']/gi;
+    let imgMatch;
+    while ((imgMatch = imgPattern.exec(html)) !== null) {
+      const imgUrl = imgMatch[1];
+      if (imgUrl) {
+        urlSet.add(imgUrl);
+      }
+    }
+    
+    // أيضاً البحث عن الصور في wsrv.nl proxy
+    const wsrvPattern = /src=["']https?:\/\/wsrv\.nl\/\?url=(https?[^&"']+)/gi;
+    while ((imgMatch = wsrvPattern.exec(html)) !== null) {
+      let imgUrl = decodeURIComponent(imgMatch[1]);
+      if (imgUrl.includes('storage.azoramoon.com')) {
+        urlSet.add(imgUrl);
+      }
+    }
+    
+    console.log(`[Pages] Azoramoon specific extraction found ${urlSet.size} images`);
   }
   
   // Method 3: Specific meshmanga extraction (appswat.com images)
