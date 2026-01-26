@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ChapterList } from "@/components/ChapterList";
+import { ChapterListNew } from "@/components/chapters/ChapterListNew";
 import {
   Star,
   BookOpen,
@@ -542,7 +542,12 @@ const MangaDetail = () => {
             </TabsList>
 
             <TabsContent value="chapters">
-              <ChapterList mangaId={manga.id} mangaSlug={manga.slug} chapters={chapters} />
+              <ChapterListNew
+                mangaId={manga.id}
+                mangaSlug={manga.slug}
+                chapters={chapters}
+                mangaCover={manga.cover_url}
+              />
             </TabsContent>
 
             <TabsContent value="gallery">
