@@ -7,7 +7,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Star, Edit, Trash2, TrendingUp, Flame } from "lucide-react";
+import { Star, Edit, Trash2, TrendingUp, Flame, Sparkles } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -26,6 +26,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { AIExtractor } from "./AIExtractor";
 
 export const MangaManager = () => {
   const { toast } = useToast();
@@ -275,6 +276,25 @@ export const MangaManager = () => {
                 </Dialog>
 
                 <div className="flex gap-2">
+                  <Dialog>
+                    <DialogTrigger asChild>
+                      <Button variant="outline" size="sm" className="bg-primary/10 border-primary/30 hover:bg-primary/20">
+                        <Sparkles className="h-4 w-4 mr-2" />
+                        استخراج بالذكاء الاصطناعي
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="max-w-2xl">
+                      <DialogHeader>
+                        <DialogTitle>استخراج معلومات: {item.title}</DialogTitle>
+                      </DialogHeader>
+                      <AIExtractor 
+                        mangaId={item.id} 
+                        sourceUrl={item.source_url}
+                        onExtracted={() => fetchManga()}
+                      />
+                    </DialogContent>
+                  </Dialog>
+
                   <Dialog>
                     <DialogTrigger asChild>
                       <Button variant="outline" size="sm">
