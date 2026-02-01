@@ -1710,58 +1710,134 @@ async function scrapeChapterPages(chapterUrl: string, source: string, supabase: 
     config.selectors.pageImages = Array.from(new Set([...forced, ...config.selectors.pageImages]));
   }
 
-  // lavatoons: استخدم Firecrawl للحصول على HTML مُرندر بالكامل
+  // lavatoons: استخدم Firecrawl للحصول على HTML مُرندر بالكامل مع retry logic
   let html = '';
   let doc: any = null;
 
   if (isLavatoons) {
-    console.log(`[Pages] Lavatoons detected - using Firecrawl for rendered HTML...`);
+    console.log(`[Pages] Lavatoons detected - trying multiple methods to get HTML...`);
     
     const firecrawlApiKey = Deno.env.get('FIRECRAWL_API_KEY') || Deno.env.get('FIRECRAWL_API_KEY_1');
     
+    // Method A: Try Firecrawl first (best for JS-rendered content)
     if (firecrawlApiKey) {
-      try {
-        console.log(`[Pages] Calling Firecrawl API for: ${chapterUrl}`);
-        
-        const firecrawlResponse = await fetch('https://api.firecrawl.dev/v1/scrape', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${firecrawlApiKey}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            url: chapterUrl,
-            formats: ['html'],
-            onlyMainContent: false,
-            waitFor: 5000, // انتظر 5 ثواني للصفحة تتحمّل كاملة
-          }),
-        });
-
-        const firecrawlData = await firecrawlResponse.json();
-        
-        if (firecrawlResponse.ok && firecrawlData.success) {
-          const firecrawlHtml = firecrawlData.data?.html || '';
-          console.log(`[Pages] Firecrawl returned ${firecrawlHtml.length} bytes`);
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+          console.log(`[Pages] Firecrawl attempt ${attempt}/2 for: ${chapterUrl}`);
           
-          if (firecrawlHtml.length > 1000) {
-            html = firecrawlHtml;
-            doc = new DOMParser().parseFromString(html, 'text/html');
+          const waitTime = attempt === 1 ? 5000 : 8000; // زيادة الانتظار في المحاولة الثانية
+          
+          const firecrawlResponse = await fetch('https://api.firecrawl.dev/v1/scrape', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${firecrawlApiKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              url: chapterUrl,
+              formats: ['html', 'rawHtml'],
+              onlyMainContent: false,
+              waitFor: waitTime,
+            }),
+          });
+
+          const firecrawlData = await firecrawlResponse.json();
+          
+          if (firecrawlResponse.ok && firecrawlData.success) {
+            const firecrawlHtml = firecrawlData.data?.html || firecrawlData.data?.rawHtml || '';
+            console.log(`[Pages] Firecrawl returned ${firecrawlHtml.length} bytes`);
             
-            const readerImgs = doc?.querySelectorAll('#readerarea img, img.ts-main-image').length || 0;
-            console.log(`[Pages] Firecrawl HTML has ${readerImgs} reader images`);
+            if (firecrawlHtml.length > 1000) {
+              html = firecrawlHtml;
+              doc = new DOMParser().parseFromString(html, 'text/html');
+              
+              const readerImgs = doc?.querySelectorAll('#readerarea img, img.ts-main-image, img[data-index]').length || 0;
+              console.log(`[Pages] Firecrawl HTML has ${readerImgs} reader images`);
+              
+              if (readerImgs > 0) {
+                console.log(`[Pages] ✓ Firecrawl success with ${readerImgs} images`);
+                break;
+              } else {
+                console.log(`[Pages] Firecrawl HTML has no reader images, trying again...`);
+                html = '';
+                doc = null;
+              }
+            }
+          } else {
+            const errMsg = firecrawlData.error || firecrawlData.message || 'Unknown error';
+            console.log(`[Pages] Firecrawl error (attempt ${attempt}):`, errMsg);
+            
+            // إذا كان خطأ 402 (no credits) لا تحاول مرة أخرى
+            if (errMsg.includes('402') || errMsg.includes('credits') || errMsg.includes('Payment')) {
+              console.log(`[Pages] Firecrawl credits exhausted, skipping...`);
+              break;
+            }
           }
-        } else {
-          console.log(`[Pages] Firecrawl error:`, firecrawlData.error || 'Unknown error');
+          
+          // انتظر قبل المحاولة التالية
+          if (attempt < 2 && !html) {
+            await new Promise(r => setTimeout(r, 2000));
+          }
+        } catch (e: any) {
+          console.log(`[Pages] Firecrawl exception (attempt ${attempt}):`, e?.message);
         }
-      } catch (e: any) {
-        console.log(`[Pages] Firecrawl exception:`, e?.message);
       }
     } else {
-      console.log(`[Pages] Firecrawl API key not configured`);
+      console.log(`[Pages] Firecrawl API key not configured - will use direct fetch`);
+    }
+    
+    // Method B: Direct fetch with enhanced headers
+    if (!html || html.length < 1000) {
+      console.log(`[Pages] Trying direct fetch with enhanced headers...`);
+      
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          // تأخير عشوائي لتجنب الحظر
+          await new Promise(r => setTimeout(r, getRandomDelay(1000, 3000)));
+          
+          const enhancedHeaders: HeadersInit = {
+            ...getBrowserHeaders(chapterUrl),
+            'Cookie': '_ga=GA1.1.123456789.1234567890; cf_clearance=bypass_token_' + Date.now(),
+            'X-Requested-With': 'XMLHttpRequest',
+          };
+          
+          const response = await fetch(chapterUrl, {
+            headers: enhancedHeaders,
+            redirect: 'follow',
+          });
+          
+          if (response.ok) {
+            const fetchedHtml = await response.text();
+            console.log(`[Pages] Direct fetch returned ${fetchedHtml.length} bytes (attempt ${attempt})`);
+            
+            if (fetchedHtml.length > 5000) {
+              // تحقق من أنها ليست صفحة Cloudflare challenge
+              if (!fetchedHtml.includes('Just a moment') && !fetchedHtml.includes('Checking your browser')) {
+                html = fetchedHtml;
+                doc = new DOMParser().parseFromString(html, 'text/html');
+                
+                const readerImgs = doc?.querySelectorAll('#readerarea img, img.ts-main-image, img[data-index]').length || 0;
+                console.log(`[Pages] Direct fetch has ${readerImgs} reader images`);
+                
+                if (readerImgs > 0 || html.includes('ts_reader_control') || html.includes('wp-content/uploads/manga')) {
+                  console.log(`[Pages] ✓ Direct fetch success`);
+                  break;
+                }
+              } else {
+                console.log(`[Pages] Cloudflare challenge detected (attempt ${attempt})`);
+              }
+            }
+          } else {
+            console.log(`[Pages] Direct fetch failed: ${response.status} (attempt ${attempt})`);
+          }
+        } catch (e: any) {
+          console.log(`[Pages] Direct fetch exception (attempt ${attempt}):`, e?.message);
+        }
+      }
     }
   }
   
-  // Fallback to regular fetch if Firecrawl didn't work
+  // Fallback to regular fetch for other sources
   if (!html || html.length < 1000) {
     console.log(`[Pages] Using regular fetchHTML...`);
     html = await fetchHTML(chapterUrl, config);
@@ -1776,10 +1852,19 @@ async function scrapeChapterPages(chapterUrl: string, source: string, supabase: 
   const urlSet = new Set<string>();
 
   const isLavatoonsChapterPageImage = (u: string) => {
+    // تحديث 2026: دعم أوسع لصور lavatoons/lavascans
     // Example: /wp-content/uploads/manga/943a9860/001.jpg
-    // Also support lavascans.com URLs
-    return /\/wp-content\/uploads\/manga\/[^"'\s<>]+\/\d{1,4}\.(?:jpg|jpeg|png|webp|gif)(?:\?|$)/i.test(u) ||
-           /lavascans\.com\/wp-content\/uploads\/manga\/[^"'\s<>]+\/\d{1,4}\.(?:jpg|jpeg|png|webp|gif)/i.test(u);
+    // Example: https://lavascans.com/wp-content/uploads/manga/3ebf2f1c/002.jpg
+    // Example: /wp-content/uploads/WP-manga/data/manga_xxx/chapter-xx/01.jpg
+    const patterns = [
+      /\/wp-content\/uploads\/manga\/[^"'\s<>]+\/\d{1,4}\.(?:jpg|jpeg|png|webp|gif)/i,
+      /\/wp-content\/uploads\/WP-manga\/data\/[^"'\s<>]+\/\d{1,4}\.(?:jpg|jpeg|png|webp|gif)/i,
+      /(?:lavatoons|lavascans)\.com\/wp-content\/uploads\/[^"'\s<>]+\/\d{1,4}\.(?:jpg|jpeg|png|webp|gif)/i,
+      /\/wp-content\/uploads\/[^"'\s<>]+chapter[^"'\s<>]*\/\d{1,4}\.(?:jpg|jpeg|png|webp|gif)/i,
+      // صور برقم فقط (001.jpg, 02.webp) من أي مسار uploads
+      /\/wp-content\/uploads\/[^"'\s<>]+\/\d{1,3}\.(?:jpg|jpeg|png|webp|gif)(?:\?|$)/i,
+    ];
+    return patterns.some(p => p.test(u));
   };
 
   const isMeshmangaChapterPageImage = (u: string) => {
@@ -1793,7 +1878,7 @@ async function scrapeChapterPages(chapterUrl: string, source: string, supabase: 
     // تحديث 2026: صور من storage.azoramoon.com
     // Example: https://storage.azoramoon.com/public//upload/series/a-bad-example-of-a-perfect-curse/kGP8JsrsZz/02.webp
     return /storage\.azoramoon\.com\/public\/+upload\/series\/[^"'\s<>]+\/\d{2,4}\.(?:jpg|jpeg|png|webp|gif)/i.test(u) ||
-           /storage\.azoramoon\.com\/[^"'\s<>]+\.\w+$/i.test(u);
+           /storage\.azoramoon\.com\/[^"'\s<>]+\.(?:jpg|jpeg|png|webp|gif)/i.test(u);
   };
 
   const addUrl = (rawUrl?: string | null) => {
@@ -1802,10 +1887,14 @@ async function scrapeChapterPages(chapterUrl: string, source: string, supabase: 
     if (!cleanedUrl) return;
 
     if (cleanedUrl.startsWith('data:image')) return;
-    if (/(?:placeholder|logo|icon|avatar|banner)/i.test(cleanedUrl)) return;
+    // تخفيف الفلتر - فقط استبعاد الملفات الواضحة
+    if (/(?:placeholder|logo|icon|avatar|banner|site-logo|favicon)/i.test(cleanedUrl)) return;
+    // استبعاد ثمبنيلز الصغيرة
+    if (/[_-](?:thumb|small|tiny|mini|150x|100x)\./i.test(cleanedUrl)) return;
 
-    // lavatoons: الصفحة فيها صور كثيرة (لوغو/ثيم/غلاف/إعلانات). نسمح فقط بصور الفصل الحقيقية (رقمية).
+    // lavatoons: الصفحة فيها صور كثيرة. نسمح فقط بصور الفصل الحقيقية
     if (isLavatoons && !isLavatoonsChapterPageImage(cleanedUrl)) {
+      console.log(`[Pages] Skipping non-chapter image: ${cleanedUrl.substring(0, 80)}`);
       return;
     }
     
@@ -1863,15 +1952,22 @@ async function scrapeChapterPages(chapterUrl: string, source: string, supabase: 
 
     const regexPatterns = isLavatoons
       ? [
-          // Absolute URLs (normal) - lavatoons and lavascans
-          /https?:\/\/(?:www\.)?(lavatoons|lavascans)\.com\/wp-content\/uploads\/manga\/[^"'\s<>]+?\/\d{1,4}\.(?:jpg|jpeg|png|webp|gif)(?:\?[^"'\s<>]*)?/gi,
+          // تحديث 2026: ts-main-image curdown with data-index أولاً
+          /<img[^>]+class="[^"]*ts-main-image[^"]*curdown[^"]*"[^>]+src="([^"]+)"/gi,
+          /<img[^>]+src="([^"]+)"[^>]+class="[^"]*ts-main-image[^"]*curdown[^"]*"/gi,
+          /<img[^>]+class="[^"]*ts-main-image[^"]*"[^>]+src="([^"]+)"/gi,
+          // Absolute URLs (normal) - lavatoons and lavascans من أي مسار uploads
+          /https?:\/\/(?:www\.)?(?:lavatoons|lavascans)\.com\/wp-content\/uploads\/[^"'\s<>]+?\/\d{1,4}\.(?:jpg|jpeg|png|webp|gif)(?:\?[^"'\s<>]*)?/gi,
+          // WP-manga data path
+          /https?:\/\/(?:www\.)?(?:lavatoons|lavascans)\.com\/wp-content\/uploads\/WP-manga\/data\/[^"'\s<>]+\.(?:jpg|jpeg|png|webp|gif)/gi,
           // Absolute URLs (JSON-escaped: https:\/\/lavatoons.com\/...)
-          /https?:\\\/\\\/(?:www\\\.)?(?:lavatoons|lavascans)\.com\\\/wp-content\\\/uploads\\\/manga\\\/[^"'\s<>]+?\\\/\d{1,4}\.(?:jpg|jpeg|png|webp|gif)(?:\?[^"'\s<>]*)?/gi,
-          // Relative URLs
+          /https?:\\\/\\\/(?:www\\\.)?(?:lavatoons|lavascans)\.com\\\/wp-content\\\/uploads\\\/[^"'\s<>]+?\\\/\d{1,4}\.(?:jpg|jpeg|png|webp|gif)(?:\?[^"'\s<>]*)?/gi,
+          // Relative URLs - أي مسار uploads مع ملف رقمي
           /\/wp-content\/uploads\/manga\/[^"'\s<>]+?\/\d{1,4}\.(?:jpg|jpeg|png|webp|gif)(?:\?[^"'\s<>]*)?/gi,
-          // Reader images in markup - تحديث 2026: ts-main-image curdown
-          /<img[^>]+class="[^"]*ts-main-image[^"]*curdown[^"]*"[^>]+(?:src|data-src)="([^"]+)"/gi,
-          /<img[^>]+class="[^"]*ts-main-image[^"]*"[^>]+(?:src|data-src)="([^"]+)"/gi,
+          /\/wp-content\/uploads\/[^"'\s<>]+?\/\d{1,3}\.(?:jpg|jpeg|png|webp|gif)(?:\?[^"'\s<>]*)?/gi,
+          // img tags with data-index attribute (2026 structure)
+          /<img[^>]+data-index=["']\d+["'][^>]+src="([^"]+)"/gi,
+          /<img[^>]+src="([^"]+)"[^>]+data-index=["']\d+["']/gi,
         ]
       : isAzoramoon
         ? [
@@ -2036,6 +2132,79 @@ for (const m of arrayLiteral.matchAll(
         console.log(`[Pages] Debug ts_reader_control snippet: ${html.substring(idx, idx + 400)}`);
       }
     }
+  }
+
+  // Method 4: Lavatoons specific - extract all images directly from img tags with class ts-main-image
+  if (isLavatoons && urlSet.size === 0) {
+    console.log(`[Pages] Trying lavatoons direct img extraction...`);
+    
+    // استخراج جميع img tags مع class ts-main-image
+    const tsMainImagePattern = /<img[^>]+class="[^"]*ts-main-image[^"]*"[^>]*>/gi;
+    let imgTagMatch;
+    while ((imgTagMatch = tsMainImagePattern.exec(html)) !== null) {
+      const imgTag = imgTagMatch[0];
+      // استخراج src من الـ tag
+      const srcMatch = imgTag.match(/src="([^"]+)"/i);
+      if (srcMatch && srcMatch[1]) {
+        let imgUrl = srcMatch[1];
+        // تحقق من أن الصورة من مسار manga
+        if (imgUrl.includes('/wp-content/uploads/') && /\/\d{1,3}\.(?:jpg|jpeg|png|webp|gif)/i.test(imgUrl)) {
+          // إذا كان مسار نسبي، أضف الدومين
+          if (!imgUrl.startsWith('http')) {
+            imgUrl = 'https://lavascans.com' + (imgUrl.startsWith('/') ? '' : '/') + imgUrl;
+          }
+          urlSet.add(imgUrl);
+          console.log(`[Pages] ts-main-image found: ${imgUrl.substring(0, 80)}`);
+        }
+      }
+    }
+    
+    // أيضاً استخراج img tags مع data-index attribute
+    const dataIndexPattern = /<img[^>]+data-index=["']\d+["'][^>]*src="([^"]+)"/gi;
+    let dataIdxMatch;
+    while ((dataIdxMatch = dataIndexPattern.exec(html)) !== null) {
+      let imgUrl = dataIdxMatch[1];
+      if (imgUrl && /\/\d{1,3}\.(?:jpg|jpeg|png|webp|gif)/i.test(imgUrl)) {
+        if (!imgUrl.startsWith('http')) {
+          imgUrl = 'https://lavascans.com' + (imgUrl.startsWith('/') ? '' : '/') + imgUrl;
+        }
+        urlSet.add(imgUrl);
+      }
+    }
+    
+    console.log(`[Pages] Lavatoons direct extraction found ${urlSet.size} images`);
+  }
+
+  // Method 5: Final fallback for lavatoons - extract any wp-content image with numeric filename
+  if (isLavatoons && urlSet.size === 0) {
+    console.log(`[Pages] Trying lavatoons final fallback...`);
+    
+    // البحث عن أي صورة من wp-content/uploads مع اسم رقمي
+    const wpContentPattern = /(?:https?:\/\/[^"'\s<>]+)?\/wp-content\/uploads\/[^"'\s<>]+\/(\d{1,3})\.(?:jpg|jpeg|png|webp|gif)(?:\?[^"'\s<>]*)?/gi;
+    let wpMatch;
+    const foundUrls: {url: string, num: number}[] = [];
+    
+    while ((wpMatch = wpContentPattern.exec(html)) !== null) {
+      let imgUrl = wpMatch[0];
+      const pageNum = parseInt(wpMatch[1]);
+      
+      // تجاهل الصور الصغيرة (thumbnails) والأغلفة
+      if (imgUrl.includes('cover') || imgUrl.includes('thumb') || imgUrl.includes('banner')) continue;
+      
+      if (!imgUrl.startsWith('http')) {
+        imgUrl = 'https://lavascans.com' + (imgUrl.startsWith('/') ? '' : '/') + imgUrl;
+      }
+      
+      foundUrls.push({url: imgUrl, num: pageNum});
+    }
+    
+    // رتب حسب رقم الصفحة وأضف فقط الصور المتسلسلة
+    foundUrls.sort((a, b) => a.num - b.num);
+    for (const item of foundUrls) {
+      urlSet.add(item.url);
+    }
+    
+    console.log(`[Pages] Lavatoons fallback found ${urlSet.size} images`);
   }
 
   const extractedUrls = Array.from(urlSet);
