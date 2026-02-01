@@ -417,18 +417,108 @@ async function loadScraperConfig(supabase: any, sourceName: string) {
   return FALLBACK_CONFIGS[sourceName.toLowerCase()] || null;
 }
 
-const MAX_RETRIES = 3; // Reduced retries
-const BASE_DELAY = 3000;
-const CLOUDFLARE_RETRY_DELAY = 8000;
-const FETCH_TIMEOUT = 25000; // 25 seconds
-const FUNCTION_TIMEOUT = 50000; // 50 seconds max execution
+const MAX_RETRIES = 5; // Increased retries for aggressive mode
+const BASE_DELAY = 2000;
+const CLOUDFLARE_RETRY_DELAY = 5000;
+const FETCH_TIMEOUT = 35000; // 35 seconds
+const FUNCTION_TIMEOUT = 55000; // 55 seconds max execution
 
 async function delay(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 async function humanDelay(): Promise<void> {
-  await delay(getRandomDelay(1000, 3000));
+  await delay(getRandomDelay(800, 2000));
+}
+
+// Check if HTML is Cloudflare challenge page - STRICT
+function isCloudflareChallengePage(html: string): boolean {
+  if (!html || html.length === 0) return true;
+  
+  const lowerHtml = html.toLowerCase();
+  
+  const criticalIndicators = [
+    'just a moment',
+    'checking your browser',
+    'cf-browser-verification',
+    '__cf_chl_',
+    'cf_chl_opt',
+    'turnstile',
+    'enable javascript and cookies',
+    'attention required',
+    'verifying you are human',
+    'please wait while we',
+  ];
+  
+  for (const indicator of criticalIndicators) {
+    if (lowerHtml.includes(indicator)) {
+      return true;
+    }
+  }
+  
+  // Short response with CF markers
+  if (html.length < 5000 && (lowerHtml.includes('cloudflare') || lowerHtml.includes('cf-ray'))) {
+    return true;
+  }
+  
+  return false;
+}
+
+// Enhanced Firecrawl direct integration for aggressive scraping
+async function useFirecrawlDirect(url: string): Promise<string | null> {
+  const apiKey = Deno.env.get('FIRECRAWL_API_KEY') || Deno.env.get('FIRECRAWL_API_KEY_1') || Deno.env.get('FIRECRAWL');
+  
+  if (!apiKey) {
+    console.log('[Firecrawl] API key not configured');
+    return null;
+  }
+  
+  console.log('[Firecrawl] 🔥 Attempting direct Firecrawl scrape...');
+  
+  const configs = [
+    { waitFor: 8000, timeout: 90 },
+    { waitFor: 15000, timeout: 120 },
+  ];
+  
+  for (const config of configs) {
+    try {
+      console.log(`[Firecrawl] Attempt with waitFor=${config.waitFor}ms`);
+      
+      const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          url,
+          formats: ['html', 'rawHtml'],
+          waitFor: config.waitFor,
+          timeout: config.timeout,
+          onlyMainContent: false,
+          skipTlsVerification: true,
+          location: { country: 'SA', languages: ['ar', 'en'] },
+        }),
+      });
+      
+      const data = await response.json();
+      
+      if (response.ok && data.success) {
+        const html = data.data?.rawHtml || data.data?.html;
+        
+        if (html && html.length > 5000 && !isCloudflareChallengePage(html)) {
+          console.log(`[Firecrawl] ✓ Success: ${html.length} bytes`);
+          return html;
+        }
+      }
+      
+      await delay(2000);
+    } catch (e: any) {
+      console.log(`[Firecrawl] Error:`, e?.message);
+    }
+  }
+  
+  return null;
 }
 
 // Smart HTML fetcher with enhanced anti-bot evasion and Cloudflare bypass integration
@@ -436,8 +526,16 @@ async function fetchHTML(url: string, config: any, retryCount = 0): Promise<stri
   try {
     console.log(`[Fetch] Attempt ${retryCount + 1}/${MAX_RETRIES + 1}: ${url}`);
     
-    // Longer delays between retries to appear more human
-    await delay(getRandomDelay(2000, 5000));
+    // For first attempt, try Firecrawl directly (most reliable for protected sites)
+    if (retryCount === 0) {
+      const firecrawlHtml = await useFirecrawlDirect(url);
+      if (firecrawlHtml) {
+        return firecrawlHtml;
+      }
+    }
+    
+    // Human-like delay
+    await delay(getRandomDelay(1500, 4000));
     
     const headers = getBrowserHeaders(retryCount > 0 ? url : undefined);
     
@@ -460,86 +558,40 @@ async function fetchHTML(url: string, config: any, retryCount = 0): Promise<stri
     console.log(`[Fetch] Status: ${response.status}, Content-Type: ${response.headers.get('content-type')}`);
     
     if (!response.ok) {
-      if (response.status === 403) {
-        console.error('[Fetch] 403 Forbidden - Trying Cloudflare bypass...');
+      if (response.status === 403 || response.status === 503) {
+        console.error(`[Fetch] ${response.status} - Trying enhanced bypass...`);
         throw new Error('CLOUDFLARE_BLOCK');
       }
-      if (response.status === 503) {
-        console.error('[Fetch] 503 Service Unavailable - Site may be down or blocking');
-        throw new Error('SERVICE_UNAVAILABLE');
-      }
-      if (response.status === 522) {
-        console.error('[Fetch] 522 Connection Timed Out - Origin server not responding');
-        throw new Error('ORIGIN_TIMEOUT');
-      }
-      if (response.status === 524) {
-        console.error('[Fetch] 524 Timeout - Cloudflare timeout waiting for origin');
-        throw new Error('CLOUDFLARE_TIMEOUT');
+      if (response.status === 522 || response.status === 524) {
+        throw new Error(`TIMEOUT_${response.status}`);
       }
       throw new Error(`HTTP ${response.status}`);
     }
 
     const html = await response.text();
     
-    // Enhanced Cloudflare detection
-    const cfHeaders = response.headers.get('cf-ray') || 
-                     response.headers.get('cf-cache-status') ||
-                     response.headers.get('server')?.toLowerCase().includes('cloudflare');
-    
-    const lowerHtml = html.toLowerCase();
-    
-    const strongChallengeIndicators = [
-      'cf-browser-verification',
-      '__cf_chl_jschl_tk__',
-      'cf-challenge-running',
-      'cf_chl_opt'
-    ];
-    
-    const isChallengeTitle = lowerHtml.includes('<title>just a moment') || 
-                            lowerHtml.includes('<title>attention required');
-    
-    const hasChallengeContent = (
-      lowerHtml.includes('enable javascript and cookies to continue') ||
-      lowerHtml.includes('checking if the site connection is secure') ||
-      lowerHtml.includes('checking your browser before accessing')
-    );
-    
-    const strongIndicatorsCount = strongChallengeIndicators.filter(p => lowerHtml.includes(p)).length;
-    const hasRayIdInError = /ray id: [a-f0-9]{16}/.test(lowerHtml);
-    
-      // Improved Cloudflare detection - more accurate
-      const isActualChallenge = (
-        isChallengeTitle ||
-        (strongIndicatorsCount >= 2) ||
-        (hasChallengeContent && cfHeaders && strongIndicatorsCount >= 1) ||
-        (hasRayIdInError && hasChallengeContent && cfHeaders)
-      );
-    
-    if (isActualChallenge) {
-      console.error(`[Fetch] Cloudflare challenge detected - attempting bypass...`);
+    // Strict Cloudflare detection
+    if (isCloudflareChallengePage(html)) {
+      console.error(`[Fetch] Cloudflare challenge detected!`);
       throw new Error('CLOUDFLARE_CHALLENGE');
     }
     
     // Check for actual content
-    if (html.length < 500) {
+    if (html.length < 3000) {
       console.error(`[Fetch] Response too short: ${html.length} bytes`);
       throw new Error('EMPTY_RESPONSE');
     }
     
-    if (!html.includes('<html') && !html.includes('<!DOCTYPE')) {
-      console.error('[Fetch] Response does not appear to be HTML');
-      throw new Error('INVALID_HTML');
-    }
-    
-    console.log(`[Fetch] ✓ Success: ${html.length} bytes, appears valid`);
+    console.log(`[Fetch] ✓ Success: ${html.length} bytes`);
     return html;
   } catch (error: any) {
     const errorMsg = error?.message || String(error);
     console.error(`[Fetch] Error on attempt ${retryCount + 1}:`, errorMsg);
     
-    // Try Cloudflare bypass for specific errors
-    if ((errorMsg === 'CLOUDFLARE_BLOCK' || errorMsg === 'CLOUDFLARE_CHALLENGE') && retryCount === 0) {
-      console.log('[Fetch] Attempting Cloudflare bypass via edge function...');
+    // Try enhanced bypass for Cloudflare errors
+    if ((errorMsg.includes('CLOUDFLARE') || errorMsg === 'CLOUDFLARE_BLOCK' || errorMsg === 'CLOUDFLARE_CHALLENGE') && retryCount < 2) {
+      console.log('[Fetch] 🛡️ Attempting enhanced bypass via edge function...');
+      
       try {
         const supabaseUrl = Deno.env.get('SUPABASE_URL');
         const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
@@ -550,19 +602,28 @@ async function fetchHTML(url: string, config: any, retryCount = 0): Promise<stri
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${supabaseKey}`,
           },
-          body: JSON.stringify({ url }),
+          body: JSON.stringify({ 
+            url, 
+            aggressive: true,
+            retries: 6 
+          }),
         });
         
         const bypassData = await bypassResponse.json();
         
         if (bypassData.success && bypassData.html) {
-          console.log('[Fetch] ✓ Cloudflare bypass successful!');
-          return bypassData.html;
+          // Verify the content is not a challenge page
+          if (!isCloudflareChallengePage(bypassData.html) && bypassData.html.length > 5000) {
+            console.log(`[Fetch] ✓ Enhanced bypass successful via ${bypassData.method}!`);
+            return bypassData.html;
+          } else {
+            console.error('[Fetch] Bypass returned invalid content');
+          }
         } else {
-          console.error('[Fetch] Cloudflare bypass failed:', bypassData.error);
+          console.error('[Fetch] Bypass failed:', bypassData.error);
         }
-      } catch (bypassError) {
-        console.error('[Fetch] Bypass error:', bypassError);
+      } catch (bypassError: any) {
+        console.error('[Fetch] Bypass exception:', bypassError?.message);
       }
     }
     
@@ -570,41 +631,31 @@ async function fetchHTML(url: string, config: any, retryCount = 0): Promise<stri
     if (error.name === 'AbortError') {
       console.error(`[Fetch] Request timeout after ${FETCH_TIMEOUT}ms`);
       if (retryCount < MAX_RETRIES) {
-        const delayMs = BASE_DELAY * Math.pow(2, retryCount) + getRandomDelay(2000, 4000);
-        console.log(`[Fetch] ⏳ Timeout occurred, retrying after ${delayMs}ms...`);
+        const delayMs = BASE_DELAY * Math.pow(1.5, retryCount) + getRandomDelay(1000, 3000);
         await delay(delayMs);
         return fetchHTML(url, config, retryCount + 1);
       }
       throw new Error('REQUEST_TIMEOUT');
     }
     
+    // Retry for other errors
     if (retryCount < MAX_RETRIES) {
-      let delayMs = BASE_DELAY * Math.pow(2, retryCount) + getRandomDelay(1000, 3000);
+      let delayMs = BASE_DELAY * Math.pow(1.5, retryCount) + getRandomDelay(1000, 2500);
       
-      // Longer delays for specific error types
       if (errorMsg.includes('CLOUDFLARE')) {
-        delayMs = CLOUDFLARE_RETRY_DELAY + getRandomDelay(3000, 6000);
-        console.log(`[Fetch] ⏳ Cloudflare detected, waiting ${delayMs}ms before retry...`);
-      } else if (errorMsg.includes('TIMEOUT') || errorMsg.includes('522') || errorMsg.includes('524')) {
-        delayMs = BASE_DELAY * Math.pow(2, retryCount + 1) + getRandomDelay(3000, 7000);
-        console.log(`[Fetch] ⏳ Timeout/522/524 error, waiting ${delayMs}ms before retry...`);
-      } else {
-        console.log(`[Fetch] ⏳ Retrying after ${delayMs}ms...`);
+        delayMs = CLOUDFLARE_RETRY_DELAY + getRandomDelay(2000, 5000);
       }
       
+      console.log(`[Fetch] ⏳ Retrying after ${delayMs}ms...`);
       await delay(delayMs);
       return fetchHTML(url, config, retryCount + 1);
     }
     
-    // Provide user-friendly error messages
+    // Final error
     if (errorMsg.includes('CLOUDFLARE')) {
       throw new Error('CLOUDFLARE_PROTECTION');
-    } else if (errorMsg.includes('TIMEOUT') || errorMsg.includes('REQUEST_TIMEOUT')) {
+    } else if (errorMsg.includes('TIMEOUT')) {
       throw new Error('REQUEST_TIMEOUT');
-    } else if (errorMsg.includes('ORIGIN_TIMEOUT') || errorMsg.includes('522')) {
-      throw new Error('ORIGIN_SERVER_TIMEOUT');
-    } else if (errorMsg.includes('524')) {
-      throw new Error('CLOUDFLARE_GATEWAY_TIMEOUT');
     }
     
     throw error;

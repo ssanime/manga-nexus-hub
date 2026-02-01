@@ -1,66 +1,83 @@
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Shield, AlertTriangle, Key, CheckCircle } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Shield, AlertTriangle, Key, CheckCircle, Zap, Lock } from "lucide-react";
 
 export const CloudflareNotice = () => {
   return (
     <>
       <Alert className="bg-green-500/10 border-green-500/50 mb-4">
-        <CheckCircle className="h-4 w-4 text-green-500" />
-        <AlertTitle className="text-green-500">✅ نظام السحب المحسّن - تحديث 2026</AlertTitle>
+        <Zap className="h-4 w-4 text-green-500" />
+        <AlertTitle className="text-green-500">🚀 نظام السحب المُحسّن - تحديث 2026</AlertTitle>
         <AlertDescription className="text-muted-foreground">
           <div className="space-y-2 mt-2">
             <p>
-              <strong>تم تحديث نظام السحب ليدعم أحدث هياكل المواقع:</strong>
+              <strong>تم تحديث نظام السحب مع تجاوز حماية متقدم:</strong>
             </p>
             <ul className="list-disc list-inside space-y-1 mr-4 text-sm">
-              <li><strong>azoramoon.com:</strong> دعم كامل للهيكل الجديد مع flex layout وتواريخ نسبية</li>
-              <li><strong>lavatoons/lavascans:</strong> دعم ts-main-image و ch-main-anchor مع retry متعدد</li>
-              <li>استخراج محسّن للصور من مسارات wp-content/uploads</li>
-              <li>تجاوز ذكي لحماية Cloudflare مع محاولات متعددة</li>
+              <li><strong>Firecrawl:</strong> ✅ متصل - الأولوية الأولى للتجاوز</li>
+              <li><strong>FlareSolverr:</strong> دعم كامل للحماية القوية</li>
+              <li><strong>ZenRows:</strong> تجاوز antibot مدمج</li>
+              <li><strong>Ultra-Stealth:</strong> محاكاة متصفح متقدمة مع cookies</li>
             </ul>
-          </div>
-        </AlertDescription>
-      </Alert>
-
-      <Alert className="bg-amber-500/10 border-amber-500/50 mb-4">
-        <AlertTriangle className="h-4 w-4 text-amber-500" />
-        <AlertTitle className="text-amber-500">تنبيه - حماية Cloudflare</AlertTitle>
-        <AlertDescription className="text-muted-foreground">
-          <div className="space-y-2 mt-2">
-            <p>
-              بعض المواقع محمية بـ Cloudflare. النظام يحاول تجاوز الحماية تلقائياً:
-            </p>
-            <ul className="list-disc list-inside space-y-1 mr-4 text-sm">
-              <li>محاولات متعددة مع headers مختلفة</li>
-              <li>تأخيرات عشوائية لمحاكاة السلوك البشري</li>
-              <li>دعم Firecrawl API للمواقع الصعبة</li>
-            </ul>
-            <p className="text-xs mt-2">
-              إذا فشل السحب، جرب مرة أخرى بعد دقائق أو استخدم الإضافة اليدوية.
-            </p>
           </div>
         </AlertDescription>
       </Alert>
 
       <Alert className="bg-blue-500/10 border-blue-500/50 mb-4">
-        <Key className="h-4 w-4 text-blue-500" />
-        <AlertTitle className="text-blue-500">💡 Firecrawl API - للحماية القوية</AlertTitle>
+        <CheckCircle className="h-4 w-4 text-blue-500" />
+        <AlertTitle className="text-blue-500">✅ المصادر المدعومة</AlertTitle>
         <AlertDescription className="text-muted-foreground">
-          <div className="space-y-3 mt-2">
-            <p className="text-sm">
-              للمواقع المحمية بشدة، أضف Firecrawl API key:
-            </p>
-            
-            <ol className="list-decimal list-inside space-y-1 text-sm mr-3">
-              <li>سجل في <a href="https://firecrawl.dev" target="_blank" rel="noopener" className="text-primary hover:underline">firecrawl.dev</a></li>
-              <li>اذهب إلى: الإعدادات → Lovable Cloud → Secrets</li>
-              <li>أضف secret باسم <code className="bg-background px-2 py-0.5 rounded text-primary">FIRECRAWL_API_KEY</code></li>
-            </ol>
+          <div className="space-y-2 mt-2">
+            <div className="grid grid-cols-2 gap-2 text-sm">
+              <span>✓ azoramoon.com</span>
+              <span>✓ lavatoons.com</span>
+              <span>✓ olympustaff.com</span>
+              <span>✓ 3asq.org</span>
+              <span>✓ onma.me</span>
+              <span>✓ dilar.tube</span>
+            </div>
+          </div>
+        </AlertDescription>
+      </Alert>
 
-            <p className="text-xs text-muted-foreground">
-              ✨ بدون Firecrawl، النظام يستخدم تقنيات stealth متقدمة تعمل مع معظم المواقع
+      <Alert className="bg-amber-500/10 border-amber-500/50 mb-4">
+        <Lock className="h-4 w-4 text-amber-500" />
+        <AlertTitle className="text-amber-500">⚠️ المواقع المحمية بشدة</AlertTitle>
+        <AlertDescription className="text-muted-foreground">
+          <div className="space-y-2 mt-2">
+            <p className="text-sm">
+              بعض المواقع مثل <strong>lekmanga.site</strong> محمية بـ Cloudflare بشكل قوي جداً.
+              النظام يحاول تجاوز الحماية تلقائياً عبر:
             </p>
+            <ol className="list-decimal list-inside space-y-1 mr-4 text-sm">
+              <li>Firecrawl مع JS rendering (الأقوى)</li>
+              <li>FlareSolverr مع session persistence</li>
+              <li>ZenRows مع premium proxy + antibot</li>
+              <li>Multi-origin bypass + cookie collection</li>
+            </ol>
+            <p className="text-xs text-muted-foreground mt-2">
+              💡 إذا فشل السحب، جرب مصدر آخر مثل azoramoon أو lavatoons
+            </p>
+          </div>
+        </AlertDescription>
+      </Alert>
+
+      <Alert className="bg-purple-500/10 border-purple-500/50 mb-4">
+        <Key className="h-4 w-4 text-purple-500" />
+        <AlertTitle className="text-purple-500">🔑 APIs المتاحة</AlertTitle>
+        <AlertDescription className="text-muted-foreground">
+          <div className="space-y-2 mt-2 text-sm">
+            <div className="flex items-center gap-2">
+              <span className="w-3 h-3 bg-green-500 rounded-full"></span>
+              <span>FIRECRAWL_API_KEY - متصل ✓</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="w-3 h-3 bg-green-500 rounded-full"></span>
+              <span>FLARESOLVERR_URL - متصل ✓</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="w-3 h-3 bg-green-500 rounded-full"></span>
+              <span>ZENROWS_API_KEY - متصل ✓</span>
+            </div>
           </div>
         </AlertDescription>
       </Alert>
