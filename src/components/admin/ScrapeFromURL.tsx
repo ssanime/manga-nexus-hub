@@ -4,11 +4,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Link2, Download, Loader2 } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Link2, Download, Loader2, Zap, AlertTriangle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
 import { Progress } from "@/components/ui/progress";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 export const ScrapeFromURL = ({ onSuccess }: { onSuccess: () => void }) => {
   const { toast } = useToast();
@@ -21,6 +23,8 @@ export const ScrapeFromURL = ({ onSuccess }: { onSuccess: () => void }) => {
   const [progress, setProgress] = useState(0);
   const [progressMessage, setProgressMessage] = useState("");
   const [autoDownloadPages, setAutoDownloadPages] = useState(false);
+  const [useAggressiveMode, setUseAggressiveMode] = useState(true);
+  const [retryFailedChapters, setRetryFailedChapters] = useState(true);
 
   const { data: sources } = useQuery({
     queryKey: ['scraper-sources'],
@@ -325,21 +329,66 @@ export const ScrapeFromURL = ({ onSuccess }: { onSuccess: () => void }) => {
               />
             </div>
 
-            <div className="flex items-center space-x-2 space-x-reverse">
-              <input
-                type="checkbox"
-                id="auto-download-pages"
-                checked={autoDownloadPages}
-                onChange={(e) => setAutoDownloadPages(e.target.checked)}
-                className="rounded border-border"
-              />
-              <Label htmlFor="auto-download-pages" className="text-sm cursor-pointer">
-                تحميل صفحات جميع الفصول تلقائياً في الخلفية
-              </Label>
+            {/* Advanced Options */}
+            <div className="space-y-3 p-3 bg-muted/30 rounded-lg">
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label htmlFor="auto-download-pages" className="text-sm cursor-pointer">
+                    تحميل صفحات جميع الفصول تلقائياً
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    سيتم سحب الصور في الخلفية حتى بعد إغلاق الصفحة
+                  </p>
+                </div>
+                <Switch
+                  id="auto-download-pages"
+                  checked={autoDownloadPages}
+                  onCheckedChange={setAutoDownloadPages}
+                />
+              </div>
+              
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label htmlFor="aggressive-mode" className="text-sm cursor-pointer flex items-center gap-1">
+                    <Zap className="h-3 w-3 text-yellow-500" />
+                    وضع التجاوز القوي
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    تفعيل جميع طرق تجاوز الحماية
+                  </p>
+                </div>
+                <Switch
+                  id="aggressive-mode"
+                  checked={useAggressiveMode}
+                  onCheckedChange={setUseAggressiveMode}
+                />
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label htmlFor="retry-failed" className="text-sm cursor-pointer">
+                    إعادة محاولة الفصول الفاشلة
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    محاولة مرة أخرى للفصول التي فشل سحبها
+                  </p>
+                </div>
+                <Switch
+                  id="retry-failed"
+                  checked={retryFailedChapters}
+                  onCheckedChange={setRetryFailedChapters}
+                />
+              </div>
             </div>
-            <p className="text-xs text-muted-foreground">
-              إذا فعلت هذا الخيار، سيتم تحميل صفحات جميع الفصول تلقائياً في الخلفية (قد يأخذ وقت طويل للمانجا ذات الفصول الكثيرة)
-            </p>
+
+            {selectedSource?.toLowerCase().includes('lekmanga') && (
+              <Alert className="bg-yellow-500/10 border-yellow-500/30">
+                <AlertTriangle className="h-4 w-4 text-yellow-500" />
+                <AlertDescription className="text-sm text-yellow-500/90">
+                  موقع lekmanga محمي بشدة. سيتم استخدام Firecrawl + Multi-strategy bypass.
+                </AlertDescription>
+              </Alert>
+            )}
 
             {loading && (
               <div className="space-y-2">
@@ -354,8 +403,19 @@ export const ScrapeFromURL = ({ onSuccess }: { onSuccess: () => void }) => {
             <Button 
               onClick={handleScrape} 
               disabled={loading || !url || !selectedSource}
-              className="w-full"
+              className="w-full gap-2"
             >
+              {loading ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  جاري السحب...
+                </>
+              ) : (
+                <>
+                  <Download className="h-4 w-4" />
+                  سحب المانجا مع الفصول
+                </>
+              )}
               {loading ? "جاري السحب..." : "سحب"}
             </Button>
           </div>
