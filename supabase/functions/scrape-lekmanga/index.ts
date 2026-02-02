@@ -160,19 +160,29 @@ async function loadScraperConfig(supabase: any, sourceName: string) {
     "lekmanga": {
       baseUrl: "https://lekmanga.net",
       selectors: {
-        title: [".post-title h1", "h1", ".c-breadcrumb li:last-child a"],
-        cover: [".summary_image img", ".summary_image a img", "img.img-responsive", ".tab-summary img"],
-        description: [".summary__content p", ".description-summary .summary__content p", ".description-summary p"],
+        title: [".post-title h1", "h1", ".c-breadcrumb li:last-child a", ".entry-title"],
+        cover: [".summary_image img", ".summary_image a img", "img.img-responsive", ".tab-summary img", "meta[property='og:image']"],
+        description: [".summary__content p", ".description-summary .summary__content p", ".description-summary p", ".manga-excerpt"],
         status: [".post-status .post-content_item .summary-content", ".post-status .summary-content"],
-        genres: [".genres-content a", ".tags-content a", "a[rel='tag']"],
-        author: [".author-content", ".post-content_item .author-content"],
+        genres: [".genres-content a", ".tags-content a", "a[rel='tag']", ".mgen a"],
+        author: [".author-content", ".post-content_item .author-content", "a[href*='manga-author']"],
         artist: [".artist-content", ".post-content_item .artist-content"],
         rating: ["#averagerate", ".score.font-meta.total_votes", "[property='ratingValue']", ".post-total-rating .score"],
-        chapters: ["ul.main.version-chap li.wp-manga-chapter", "li.wp-manga-chapter", ".listing-chapters_wrap ul li"],
+        chapters: ["ul.main.version-chap li.wp-manga-chapter", "li.wp-manga-chapter", ".listing-chapters_wrap ul li", ".chapters-list li"],
         chapterTitle: ["a"],
         chapterUrl: ["a"],
         chapterDate: [".chapter-release-date i", ".chapter-release-date", "span.chapter-release-date i"],
-        pageImages: [".reading-content img", ".page-break img", "img.wp-manga-chapter-img", "#image-container img"],
+        // تحديث 2026: دعم أفضل لصور lekmanga
+        pageImages: [
+          ".reading-content img", 
+          ".page-break img", 
+          "img.wp-manga-chapter-img", 
+          "#image-container img",
+          "#readerarea img",
+          ".entry-content img[src*='wp-content/uploads']",
+          "img[data-src*='wp-content/uploads']",
+          "img[src*='/manga/']"
+        ],
         catalogMangaCard: [".page-item-detail", ".manga-item", ".c-tabs-item__content"],
         catalogMangaLink: ["a"],
         catalogMangaCover: ["img"]
@@ -1725,10 +1735,28 @@ async function scrapeChapterPages(chapterUrl: string, source: string, supabase: 
   const isLavatoons = sourceLower.includes('lavatoons') || sourceLower.includes('lavascans') || chapterUrl.includes('lavatoons.com') || chapterUrl.includes('lavascans.com');
   const isMeshmanga = sourceLower.includes('meshmanga') || chapterUrl.includes('meshmanga.com');
   const isAzoramoon = sourceLower.includes('azoramoon') || chapterUrl.includes('azoramoon.com');
+  const isLekmanga = sourceLower.includes('lekmanga') || chapterUrl.includes('lekmanga');
 
   // Ensure selectors shape
   config.selectors = config.selectors || {};
   config.selectors.pageImages = Array.isArray(config.selectors.pageImages) ? config.selectors.pageImages : [];
+
+  // lekmanga: تحديث 2026 - دعم محسن للصور
+  if (isLekmanga) {
+    const forced = [
+      '.reading-content img',
+      '.page-break img',
+      'img.wp-manga-chapter-img',
+      '#image-container img',
+      '#readerarea img',
+      '.entry-content img[src*="wp-content/uploads"]',
+      'img[data-src*="wp-content/uploads"]',
+      'img[src*="/manga/"]',
+      '.container img[src*="wp-content"]'
+    ];
+    config.selectors.pageImages = Array.from(new Set([...forced, ...config.selectors.pageImages]));
+    console.log(`[Pages] Lekmanga mode enabled with ${forced.length} forced selectors`);
+  }
 
   // lavatoons: تحديث 2026 - ts-main-image curdown with data-index
   if (isLavatoons) {
@@ -1931,6 +1959,18 @@ async function scrapeChapterPages(chapterUrl: string, source: string, supabase: 
     return /storage\.azoramoon\.com\/public\/+upload\/series\/[^"'\s<>]+\/\d{2,4}\.(?:jpg|jpeg|png|webp|gif)/i.test(u) ||
            /storage\.azoramoon\.com\/[^"'\s<>]+\.(?:jpg|jpeg|png|webp|gif)/i.test(u);
   };
+  
+  // lekmanga: دعم محسن للصور - تحديث 2026
+  const isLekmangaChapterPageImage = (u: string) => {
+    // Accept images from wp-content/uploads with manga/chapter patterns
+    const patterns = [
+      /\/wp-content\/uploads\/[^"'\s<>]+\/\d{1,4}\.(?:jpg|jpeg|png|webp|gif)/i,
+      /lekmanga[^"'\s<>]*\/wp-content\/uploads\/[^"'\s<>]+\.(?:jpg|jpeg|png|webp|gif)/i,
+      /\/manga\/[^"'\s<>]+\/\d{1,4}\.(?:jpg|jpeg|png|webp|gif)/i,
+      /\/chapters?\/[^"'\s<>]+\/\d{1,4}\.(?:jpg|jpeg|png|webp|gif)/i,
+    ];
+    return patterns.some(p => p.test(u));
+  };
 
   const addUrl = (rawUrl?: string | null) => {
     if (!rawUrl) return;
@@ -1957,6 +1997,16 @@ async function scrapeChapterPages(chapterUrl: string, source: string, supabase: 
     // azoramoon: نسمح فقط بصور من storage.azoramoon.com
     if (isAzoramoon && !isAzoramoonChapterPageImage(cleanedUrl)) {
       return;
+    }
+    
+    // lekmanga: فلتر خاص لتجنب سحب الصور غير المتعلقة بالفصل
+    if (isLekmanga) {
+      // نقبل جميع صور wp-content/uploads
+      const isValidLekmangaImage = isLekmangaChapterPageImage(cleanedUrl) || 
+                                    cleanedUrl.includes('wp-content/uploads');
+      if (!isValidLekmangaImage) {
+        return;
+      }
     }
 
     urlSet.add(cleanedUrl);
@@ -2038,11 +2088,28 @@ async function scrapeChapterPages(chapterUrl: string, source: string, supabase: 
               // صور w-full h-auto
               /<img[^>]+class="[^"]*w-full[^"]*h-auto[^"]*"[^>]+src="([^"]+)"/gi,
             ]
-          : [
-              /https?:\/\/[^"'\s<>]+\/wp-content\/uploads\/[^"'\s<>]+?\.(?:jpg|jpeg|png|webp|gif)(?:\?[^"'\s<>]*)?/gi,
-              /https?:\/\/[^"'\s<>]+\/manga\/[^"'\s<>]+?\.(?:jpg|jpeg|png|webp|gif)(?:\?[^"'\s<>]*)?/gi,
-              /<img[^>]+class="[^"]*ts-main-image[^"]*"[^>]+src="([^"]+)"/gi,
-            ];
+          : isLekmanga
+            ? [
+                // lekmanga تحديث 2026: دعم محسن للصور
+                // صور من .reading-content أو .page-break
+                /<div[^>]+class="[^"]*(?:reading-content|page-break)[^"]*"[^>]*>.*?<img[^>]+src="([^"]+)"/gi,
+                // صور wp-manga-chapter-img
+                /<img[^>]+class="[^"]*wp-manga-chapter-img[^"]*"[^>]+src="([^"]+)"/gi,
+                /<img[^>]+src="([^"]+)"[^>]+class="[^"]*wp-manga-chapter-img[^"]*"/gi,
+                // صور من wp-content/uploads مع أرقام
+                /https?:\/\/[^"'\s<>]+lekmanga[^"'\s<>]*\/wp-content\/uploads\/[^"'\s<>]+\.(?:jpg|jpeg|png|webp|gif)/gi,
+                /https?:\/\/[^"'\s<>]+\/wp-content\/uploads\/[^"'\s<>]+\/\d{1,4}\.(?:jpg|jpeg|png|webp|gif)/gi,
+                // أي صورة من wp-content/uploads
+                /https?:\/\/[^"'\s<>]+\/wp-content\/uploads\/[^"'\s<>]+?\.(?:jpg|jpeg|png|webp|gif)(?:\?[^"'\s<>]*)?/gi,
+                // data-src attributes
+                /data-src="([^"]+\.(?:jpg|jpeg|png|webp|gif)[^"]*)"/gi,
+                /data-lazy-src="([^"]+\.(?:jpg|jpeg|png|webp|gif)[^"]*)"/gi,
+              ]
+            : [
+                /https?:\/\/[^"'\s<>]+\/wp-content\/uploads\/[^"'\s<>]+?\.(?:jpg|jpeg|png|webp|gif)(?:\?[^"'\s<>]*)?/gi,
+                /https?:\/\/[^"'\s<>]+\/manga\/[^"'\s<>]+?\.(?:jpg|jpeg|png|webp|gif)(?:\?[^"'\s<>]*)?/gi,
+                /<img[^>]+class="[^"]*ts-main-image[^"]*"[^>]+src="([^"]+)"/gi,
+              ];
 
     for (const pattern of regexPatterns) {
       const matches = regexScopeHtml.matchAll(pattern);
@@ -2085,6 +2152,30 @@ async function scrapeChapterPages(chapterUrl: string, source: string, supabase: 
     }
     
     console.log(`[Pages] Azoramoon specific extraction found ${urlSet.size} images`);
+  }
+  
+  // Method: Specific lekmanga extraction
+  if (isLekmanga && urlSet.size === 0) {
+    console.log(`[Pages] Trying lekmanga specific extraction...`);
+    
+    // Look for all img tags in reading-content or page-break divs
+    const imgPatterns = [
+      /src=["'](https?:\/\/[^"']+\/wp-content\/uploads\/[^"']+\.(?:jpg|jpeg|png|webp|gif)[^"']*)["']/gi,
+      /data-src=["'](https?:\/\/[^"']+\/wp-content\/uploads\/[^"']+\.(?:jpg|jpeg|png|webp|gif)[^"']*)["']/gi,
+      /data-lazy-src=["'](https?:\/\/[^"']+\.(?:jpg|jpeg|png|webp|gif)[^"']*)["']/gi,
+    ];
+    
+    for (const pattern of imgPatterns) {
+      let imgMatch;
+      while ((imgMatch = pattern.exec(html)) !== null) {
+        const imgUrl = imgMatch[1];
+        if (imgUrl && !imgUrl.includes('logo') && !imgUrl.includes('thumb')) {
+          urlSet.add(imgUrl);
+        }
+      }
+    }
+    
+    console.log(`[Pages] Lekmanga specific extraction found ${urlSet.size} images`);
   }
   
   // Method 3: Specific meshmanga extraction (appswat.com images)
