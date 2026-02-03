@@ -197,16 +197,50 @@ const Reader = () => {
     }
   };
 
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+  const fetchChapterPages = async (chapterDbId: string) => {
+    const { data, error } = await supabase
+      .from("chapter_pages")
+      .select("image_url")
+      .eq("chapter_id", chapterDbId)
+      .order("page_number", { ascending: true });
+
+    if (error) throw error;
+    return (data || []).map((p) => p.image_url).filter(Boolean);
+  };
+
+  const waitForChapterPages = async (
+    chapterDbId: string,
+    opts?: { timeoutMs?: number; initialDelayMs?: number }
+  ) => {
+    const timeoutMs = opts?.timeoutMs ?? 60_000;
+    const initialDelayMs = opts?.initialDelayMs ?? 800;
+
+    const startedAt = Date.now();
+    let delay = initialDelayMs;
+
+    // Poll until we see at least 1 page or until timeout.
+    while (Date.now() - startedAt < timeoutMs) {
+      const urls = await fetchChapterPages(chapterDbId);
+      if (urls.length > 0) return urls;
+      await sleep(delay);
+      delay = Math.min(4000, Math.round(delay * 1.4));
+    }
+
+    return [] as string[];
+  };
+
   const scrapeAndReloadPages = async (mangaData: any, chapterData: any) => {
     setRescraping(true);
-    toast({ title: "جاري التحديث", description: "جاري سحب صفحات الفصل..." });
+    toast({ title: "جاري التحميل", description: "جاري تجهيز صور الفصل..." });
 
     try {
       const {
         data: { session },
       } = await supabase.auth.getSession();
 
-      await supabase.functions.invoke("scrape-lekmanga", {
+      const { error: invokeError } = await supabase.functions.invoke("scrape-lekmanga", {
         body: {
           url: chapterData.source_url,
           jobType: "pages",
@@ -216,19 +250,28 @@ const Reader = () => {
         headers: session ? { Authorization: `Bearer ${session.access_token}` } : {},
       });
 
-      const { data: newPagesData } = await supabase
-        .from("chapter_pages")
-        .select("*")
-        .eq("chapter_id", chapterData.id)
-        .order("page_number", { ascending: true });
+      if (invokeError) {
+        console.error("Scrape invoke error:", invokeError);
+        throw new Error(invokeError.message || "فشل سحب صور الفصل");
+      }
 
-      const urls = newPagesData?.map((p) => p.image_url) || [];
+      // The backend may keep downloading/uploading images after the invoke returns.
+      // We poll the DB so we don't show "0 صفحات" prematurely.
+      const urls = await waitForChapterPages(chapterData.id);
+
+      if (urls.length === 0) {
+        throw new Error(
+          "لم يتم العثور على أي صور بعد السحب. قد يكون الفصل محمي/الرابط تغيّر أو العملية ما زالت جارية—جرّب إعادة التحميل بعد دقيقة."
+        );
+      }
+
       setPages(urls);
-      toast({ title: "تم بنجاح", description: `تم تحميل ${urls.length} صفحة` });
+      toast({ title: "تم", description: `تم تحميل ${urls.length} صفحة` });
     } catch (err) {
+      console.error("Error scraping chapter pages:", err);
       toast({
         title: "خطأ",
-        description: "فشل سحب صفحات الفصل",
+        description: err instanceof Error ? err.message : "فشل سحب صفحات الفصل",
         variant: "destructive",
       });
     } finally {
