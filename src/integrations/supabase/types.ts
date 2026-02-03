@@ -14,6 +14,69 @@ export type Database = {
   }
   public: {
     Tables: {
+      background_download_queue: {
+        Row: {
+          attempts: number | null
+          chapter_id: string | null
+          completed_at: string | null
+          created_at: string | null
+          error_message: string | null
+          id: string
+          manga_id: string | null
+          max_attempts: number | null
+          priority: number | null
+          source: string
+          source_url: string
+          status: string
+          updated_at: string | null
+        }
+        Insert: {
+          attempts?: number | null
+          chapter_id?: string | null
+          completed_at?: string | null
+          created_at?: string | null
+          error_message?: string | null
+          id?: string
+          manga_id?: string | null
+          max_attempts?: number | null
+          priority?: number | null
+          source: string
+          source_url: string
+          status?: string
+          updated_at?: string | null
+        }
+        Update: {
+          attempts?: number | null
+          chapter_id?: string | null
+          completed_at?: string | null
+          created_at?: string | null
+          error_message?: string | null
+          id?: string
+          manga_id?: string | null
+          max_attempts?: number | null
+          priority?: number | null
+          source?: string
+          source_url?: string
+          status?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "background_download_queue_chapter_id_fkey"
+            columns: ["chapter_id"]
+            isOneToOne: false
+            referencedRelation: "chapters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "background_download_queue_manga_id_fkey"
+            columns: ["manga_id"]
+            isOneToOne: false
+            referencedRelation: "manga"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       chapter_pages: {
         Row: {
           chapter_id: string
