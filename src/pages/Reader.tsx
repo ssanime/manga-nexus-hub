@@ -210,25 +210,53 @@ const Reader = () => {
     return (data || []).map((p) => p.image_url).filter(Boolean);
   };
 
+  // وضع "سريع ثم يكمل": يعرض الصفحات المتاحة فوراً ويكمل polling للباقي
   const waitForChapterPages = async (
     chapterDbId: string,
-    opts?: { timeoutMs?: number; initialDelayMs?: number }
+    onPartialUpdate?: (urls: string[]) => void,
+    opts?: { timeoutMs?: number; initialDelayMs?: number; minPages?: number }
   ) => {
-    const timeoutMs = opts?.timeoutMs ?? 60_000;
-    const initialDelayMs = opts?.initialDelayMs ?? 800;
+    const timeoutMs = opts?.timeoutMs ?? 90_000;
+    const initialDelayMs = opts?.initialDelayMs ?? 600;
+    const minPagesForQuickShow = opts?.minPages ?? 8; // عرض بعد 8 صفحات
 
     const startedAt = Date.now();
     let delay = initialDelayMs;
+    let lastCount = 0;
+    let stableCount = 0;
 
-    // Poll until we see at least 1 page or until timeout.
+    // Poll until we have enough pages or stable count
     while (Date.now() - startedAt < timeoutMs) {
       const urls = await fetchChapterPages(chapterDbId);
-      if (urls.length > 0) return urls;
+      
+      // Show partial results quickly
+      if (urls.length >= minPagesForQuickShow && onPartialUpdate) {
+        onPartialUpdate(urls);
+      }
+
+      // Check if count is stable (no new pages for 2 consecutive polls)
+      if (urls.length === lastCount && urls.length > 0) {
+        stableCount++;
+        if (stableCount >= 3) {
+          // Count stable for 3 polls, consider complete
+          return urls;
+        }
+      } else {
+        stableCount = 0;
+        lastCount = urls.length;
+      }
+
+      // If we have a good number of pages, reduce poll frequency
+      if (urls.length >= 30) {
+        delay = 3000;
+      }
+
       await sleep(delay);
-      delay = Math.min(4000, Math.round(delay * 1.4));
+      delay = Math.min(4000, Math.round(delay * 1.3));
     }
 
-    return [] as string[];
+    // Final fetch on timeout
+    return fetchChapterPages(chapterDbId);
   };
 
   const scrapeAndReloadPages = async (mangaData: any, chapterData: any) => {
@@ -240,7 +268,8 @@ const Reader = () => {
         data: { session },
       } = await supabase.auth.getSession();
 
-      const { error: invokeError } = await supabase.functions.invoke("scrape-lekmanga", {
+      // بدء السحب (fire-and-forget style but we await to know if it started)
+      const invokePromise = supabase.functions.invoke("scrape-lekmanga", {
         body: {
           url: chapterData.source_url,
           jobType: "pages",
@@ -250,14 +279,29 @@ const Reader = () => {
         headers: session ? { Authorization: `Bearer ${session.access_token}` } : {},
       });
 
-      if (invokeError) {
-        console.error("Scrape invoke error:", invokeError);
-        throw new Error(invokeError.message || "فشل سحب صور الفصل");
-      }
+      // انتظار قصير للسماح للـ backend بالبدء
+      await sleep(800);
 
-      // The backend may keep downloading/uploading images after the invoke returns.
-      // We poll the DB so we don't show "0 صفحات" prematurely.
-      const urls = await waitForChapterPages(chapterData.id);
+      // بدء polling مع تحديث جزئي للصفحات
+      let shownQuickMessage = false;
+      const urls = await waitForChapterPages(
+        chapterData.id,
+        (partialUrls) => {
+          // عرض الصفحات المتاحة فوراً
+          setPages(partialUrls);
+          if (!shownQuickMessage && partialUrls.length > 0) {
+            toast({ title: "جاري التحميل", description: `${partialUrls.length} صفحة... المزيد قادم` });
+            shownQuickMessage = true;
+          }
+        }
+      );
+
+      // التحقق من نتيجة invoke
+      const { error: invokeError } = await invokePromise;
+      if (invokeError) {
+        console.warn("Scrape invoke warning:", invokeError);
+        // لا نرمي خطأ إذا حصلنا على صفحات
+      }
 
       if (urls.length === 0) {
         throw new Error(

@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ChapterListNew } from "@/components/chapters/ChapterListNew";
+import { BackgroundQueueManager } from "@/components/admin/BackgroundQueueManager";
 import {
   Star,
   BookOpen,
@@ -27,6 +28,7 @@ import {
   Bookmark,
   MessageCircle,
   ExternalLink,
+  Settings,
 } from "lucide-react";
 
 const MangaDetail = () => {
@@ -36,6 +38,7 @@ const MangaDetail = () => {
   const [user, setUser] = useState<any>(null);
   const [isFavorite, setIsFavorite] = useState(false);
   const [showFullDescription, setShowFullDescription] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
   const heroRef = useRef<HTMLDivElement>(null);
 
   const { scrollY } = useScroll();
@@ -50,6 +53,17 @@ const MangaDetail = () => {
   const checkUser = async () => {
     const { data: { user } } = await supabase.auth.getUser();
     setUser(user);
+    
+    if (user) {
+      // Check if user is admin
+      const { data: roleData } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', user.id)
+        .eq('role', 'admin')
+        .maybeSingle();
+      setIsAdmin(!!roleData);
+    }
   };
 
   // Fetch manga data
@@ -551,73 +565,90 @@ const MangaDetail = () => {
             </TabsContent>
 
             <TabsContent value="gallery">
-              <Card className="p-6 bg-card/50 backdrop-blur-sm border-border/50">
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-                  {manga.publisher && (
-                    <div>
-                      <p className="text-sm text-muted-foreground mb-1">الناشر</p>
-                      <p className="font-semibold">{manga.publisher}</p>
-                    </div>
-                  )}
-                  {manga.country && (
-                    <div>
-                      <p className="text-sm text-muted-foreground mb-1">بلد الأصل</p>
-                      <p className="font-semibold">
-                        {manga.country === "japan"
-                          ? "اليابان"
-                          : manga.country === "korea"
-                          ? "كوريا"
-                          : manga.country === "china"
-                          ? "الصين"
-                          : "أخرى"}
-                      </p>
-                    </div>
-                  )}
-                  {manga.language && (
-                    <div>
-                      <p className="text-sm text-muted-foreground mb-1">اللغة</p>
-                      <p className="font-semibold">{manga.language}</p>
-                    </div>
-                  )}
-                  {manga.reading_direction && (
-                    <div>
-                      <p className="text-sm text-muted-foreground mb-1">اتجاه القراءة</p>
-                      <p className="font-semibold">
-                        {manga.reading_direction === "rtl"
-                          ? "من اليمين لليسار"
-                          : "من اليسار لليمين"}
-                      </p>
-                    </div>
-                  )}
-                </div>
-
-                {/* External Links */}
-                {manga.external_links &&
-                  typeof manga.external_links === "object" &&
-                  !Array.isArray(manga.external_links) && (
-                    <div className="mt-6 pt-6 border-t border-border">
-                      <p className="text-sm text-muted-foreground mb-3">روابط خارجية</p>
-                      <div className="flex flex-wrap gap-2">
-                        {Object.entries(manga.external_links).map(([key, url]) => (
-                          <a
-                            key={key}
-                            href={url as string}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 px-3 py-1.5 bg-secondary hover:bg-primary/20 rounded-lg text-sm transition-colors"
-                          >
-                            <ExternalLink className="h-3 w-3" />
-                            {key === "mal"
-                              ? "MyAnimeList"
-                              : key === "anilist"
-                              ? "AniList"
-                              : key}
-                          </a>
-                        ))}
+              <div className="space-y-6">
+                <Card className="p-6 bg-card/50 backdrop-blur-sm border-border/50">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                    {manga.publisher && (
+                      <div>
+                        <p className="text-sm text-muted-foreground mb-1">الناشر</p>
+                        <p className="font-semibold">{manga.publisher}</p>
                       </div>
+                    )}
+                    {manga.country && (
+                      <div>
+                        <p className="text-sm text-muted-foreground mb-1">بلد الأصل</p>
+                        <p className="font-semibold">
+                          {manga.country === "japan"
+                            ? "اليابان"
+                            : manga.country === "korea"
+                            ? "كوريا"
+                            : manga.country === "china"
+                            ? "الصين"
+                            : "أخرى"}
+                        </p>
+                      </div>
+                    )}
+                    {manga.language && (
+                      <div>
+                        <p className="text-sm text-muted-foreground mb-1">اللغة</p>
+                        <p className="font-semibold">{manga.language}</p>
+                      </div>
+                    )}
+                    {manga.reading_direction && (
+                      <div>
+                        <p className="text-sm text-muted-foreground mb-1">اتجاه القراءة</p>
+                        <p className="font-semibold">
+                          {manga.reading_direction === "rtl"
+                            ? "من اليمين لليسار"
+                            : "من اليسار لليمين"}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* External Links */}
+                  {manga.external_links &&
+                    typeof manga.external_links === "object" &&
+                    !Array.isArray(manga.external_links) && (
+                      <div className="mt-6 pt-6 border-t border-border">
+                        <p className="text-sm text-muted-foreground mb-3">روابط خارجية</p>
+                        <div className="flex flex-wrap gap-2">
+                          {Object.entries(manga.external_links).map(([key, url]) => (
+                            <a
+                              key={key}
+                              href={url as string}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 px-3 py-1.5 bg-secondary hover:bg-primary/20 rounded-lg text-sm transition-colors"
+                            >
+                              <ExternalLink className="h-3 w-3" />
+                              {key === "mal"
+                                ? "MyAnimeList"
+                                : key === "anilist"
+                                ? "AniList"
+                                : key}
+                            </a>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                </Card>
+
+                {/* Admin Only: Background Download Manager */}
+                {isAdmin && (
+                  <div className="pt-4">
+                    <div className="flex items-center gap-2 mb-4">
+                      <Settings className="h-5 w-5 text-primary" />
+                      <h3 className="font-semibold">أدوات المسؤول</h3>
                     </div>
-                  )}
-              </Card>
+                    <BackgroundQueueManager
+                      mangaId={manga.id}
+                      mangaTitle={manga.title}
+                      source={manga.source}
+                    />
+                  </div>
+                )}
+              </div>
             </TabsContent>
           </Tabs>
         </motion.div>

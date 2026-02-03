@@ -263,7 +263,7 @@ export const ScrapeFromURL = ({ onSuccess }: { onSuccess: () => void }) => {
 
       toast({
         title: "✅ تم سحب الكتالوج",
-        description: `تم سحب ${count} مانجا بنجاح مع جميع الفصول والصور`,
+        description: `تم إنشاء ${count} مانجا مع فصولها. يمكنك الآن تحميل الصور من صفحة كل مانجا.`,
       });
 
       // Show URLs in console for debugging
@@ -430,9 +430,10 @@ export const ScrapeFromURL = ({ onSuccess }: { onSuccess: () => void }) => {
             <h3 className="text-lg font-semibold">سحب من الكتالوج</h3>
           </div>
           
-          <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4 mb-4">
-            <p className="text-sm text-blue-400">
-              💡 سحب الكتالوج يعثر على روابط المانجا من الصفحة الرئيسية. بعدها يمكنك سحب كل مانجا على حدة
+          <div className="bg-green-500/10 border border-green-500/20 rounded-lg p-4 mb-4">
+            <p className="text-sm text-green-400">
+              🚀 <strong>سحب تلقائي كامل:</strong> سيتم سحب المانجا + إنشائها في قاعدة البيانات + سحب جميع الفصول تلقائياً.
+              يمكنك لاحقاً تحميل صور الفصول بالخلفية.
             </p>
           </div>
           
