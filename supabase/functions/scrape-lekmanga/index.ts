@@ -1789,22 +1789,25 @@ async function scrapeChapterPages(chapterUrl: string, source: string, supabase: 
     config.selectors.pageImages = Array.from(new Set([...forced, ...config.selectors.pageImages]));
   }
 
-  // lavatoons: استخدم Firecrawl للحصول على HTML مُرندر بالكامل مع retry logic
+  // Use Firecrawl for JS-rendered or protected sites (lavatoons, lekmanga, etc.)
   let html = '';
   let doc: any = null;
 
-  if (isLavatoons) {
-    console.log(`[Pages] Lavatoons detected - trying multiple methods to get HTML...`);
+  const needsFirecrawl = isLavatoons || isLekmanga;
+
+  if (needsFirecrawl) {
+    const siteName = isLavatoons ? 'Lavatoons' : 'Lekmanga';
+    console.log(`[Pages] ${siteName} detected - trying multiple methods to get HTML...`);
     
     const firecrawlApiKey = Deno.env.get('FIRECRAWL_API_KEY') || Deno.env.get('FIRECRAWL_API_KEY_1');
     
-    // Method A: Try Firecrawl first (best for JS-rendered content)
+    // Method A: Try Firecrawl first (best for JS-rendered & protected content)
     if (firecrawlApiKey) {
       for (let attempt = 1; attempt <= 2; attempt++) {
         try {
           console.log(`[Pages] Firecrawl attempt ${attempt}/2 for: ${chapterUrl}`);
           
-          const waitTime = attempt === 1 ? 5000 : 8000; // زيادة الانتظار في المحاولة الثانية
+          const waitTime = attempt === 1 ? 5000 : 10000;
           
           const firecrawlResponse = await fetch('https://api.firecrawl.dev/v1/scrape', {
             method: 'POST',
@@ -1817,43 +1820,54 @@ async function scrapeChapterPages(chapterUrl: string, source: string, supabase: 
               formats: ['html', 'rawHtml'],
               onlyMainContent: false,
               waitFor: waitTime,
+              skipTlsVerification: true,
+              location: { country: 'SA', languages: ['ar', 'en'] },
             }),
           });
 
           const firecrawlData = await firecrawlResponse.json();
           
           if (firecrawlResponse.ok && firecrawlData.success) {
-            const firecrawlHtml = firecrawlData.data?.html || firecrawlData.data?.rawHtml || '';
+            const firecrawlHtml = firecrawlData.data?.rawHtml || firecrawlData.data?.html || '';
             console.log(`[Pages] Firecrawl returned ${firecrawlHtml.length} bytes`);
             
-            if (firecrawlHtml.length > 1000) {
+            if (firecrawlHtml.length > 1000 && !isCloudflareChallengePage(firecrawlHtml)) {
               html = firecrawlHtml;
               doc = new DOMParser().parseFromString(html, 'text/html');
               
-              const readerImgs = doc?.querySelectorAll('#readerarea img, img.ts-main-image, img[data-index]').length || 0;
+              // Check for reader images
+              const readerSelectors = isLavatoons 
+                ? '#readerarea img, img.ts-main-image, img[data-index]'
+                : '.reading-content img, .page-break img, img.wp-manga-chapter-img, img[src*="wp-content/uploads"]';
+              const readerImgs = doc?.querySelectorAll(readerSelectors).length || 0;
               console.log(`[Pages] Firecrawl HTML has ${readerImgs} reader images`);
               
               if (readerImgs > 0) {
                 console.log(`[Pages] ✓ Firecrawl success with ${readerImgs} images`);
                 break;
-              } else {
-                console.log(`[Pages] Firecrawl HTML has no reader images, trying again...`);
-                html = '';
-                doc = null;
               }
+              
+              // Even without DOM images, check regex for image URLs
+              const hasWpContentImages = (firecrawlHtml.match(/wp-content\/uploads\/[^"'\s<>]+\.\w{3,4}/g) || []).length;
+              if (hasWpContentImages > 3) {
+                console.log(`[Pages] ✓ Firecrawl has ${hasWpContentImages} wp-content image URLs in HTML`);
+                break;
+              }
+              
+              console.log(`[Pages] Firecrawl HTML has no reader images, trying again...`);
+              html = '';
+              doc = null;
             }
           } else {
             const errMsg = firecrawlData.error || firecrawlData.message || 'Unknown error';
             console.log(`[Pages] Firecrawl error (attempt ${attempt}):`, errMsg);
             
-            // إذا كان خطأ 402 (no credits) لا تحاول مرة أخرى
             if (errMsg.includes('402') || errMsg.includes('credits') || errMsg.includes('Payment')) {
               console.log(`[Pages] Firecrawl credits exhausted, skipping...`);
               break;
             }
           }
           
-          // انتظر قبل المحاولة التالية
           if (attempt < 2 && !html) {
             await new Promise(r => setTimeout(r, 2000));
           }
@@ -1871,40 +1885,45 @@ async function scrapeChapterPages(chapterUrl: string, source: string, supabase: 
       
       for (let attempt = 1; attempt <= 3; attempt++) {
         try {
-          // تأخير عشوائي لتجنب الحظر
           await new Promise(r => setTimeout(r, getRandomDelay(1000, 3000)));
           
           const enhancedHeaders: HeadersInit = {
             ...getBrowserHeaders(chapterUrl),
             'Cookie': '_ga=GA1.1.123456789.1234567890; cf_clearance=bypass_token_' + Date.now(),
-            'X-Requested-With': 'XMLHttpRequest',
           };
+          
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 30000);
           
           const response = await fetch(chapterUrl, {
             headers: enhancedHeaders,
             redirect: 'follow',
+            signal: controller.signal,
           });
+          clearTimeout(timeoutId);
           
           if (response.ok) {
             const fetchedHtml = await response.text();
             console.log(`[Pages] Direct fetch returned ${fetchedHtml.length} bytes (attempt ${attempt})`);
             
-            if (fetchedHtml.length > 5000) {
-              // تحقق من أنها ليست صفحة Cloudflare challenge
-              if (!fetchedHtml.includes('Just a moment') && !fetchedHtml.includes('Checking your browser')) {
-                html = fetchedHtml;
-                doc = new DOMParser().parseFromString(html, 'text/html');
-                
-                const readerImgs = doc?.querySelectorAll('#readerarea img, img.ts-main-image, img[data-index]').length || 0;
-                console.log(`[Pages] Direct fetch has ${readerImgs} reader images`);
-                
-                if (readerImgs > 0 || html.includes('ts_reader_control') || html.includes('wp-content/uploads/manga')) {
-                  console.log(`[Pages] ✓ Direct fetch success`);
-                  break;
-                }
-              } else {
-                console.log(`[Pages] Cloudflare challenge detected (attempt ${attempt})`);
+            if (fetchedHtml.length > 5000 && !isCloudflareChallengePage(fetchedHtml)) {
+              html = fetchedHtml;
+              doc = new DOMParser().parseFromString(html, 'text/html');
+              
+              // Check for images (DOM or regex)
+              const hasImages = isLavatoons
+                ? (doc?.querySelectorAll('#readerarea img, img.ts-main-image').length || 0) > 0
+                : (doc?.querySelectorAll('.reading-content img, .page-break img, img[src*="wp-content/uploads"]').length || 0) > 0 ||
+                  (fetchedHtml.match(/wp-content\/uploads\/[^"'\s<>]+\.\w{3,4}/g) || []).length > 3;
+              
+              if (hasImages || fetchedHtml.includes('wp-content/uploads/manga')) {
+                console.log(`[Pages] ✓ Direct fetch success`);
+                break;
               }
+            } else if (fetchedHtml.length <= 5000) {
+              console.log(`[Pages] Response too short (attempt ${attempt})`);
+            } else {
+              console.log(`[Pages] Cloudflare challenge detected (attempt ${attempt})`);
             }
           } else {
             console.log(`[Pages] Direct fetch failed: ${response.status} (attempt ${attempt})`);
@@ -1916,7 +1935,7 @@ async function scrapeChapterPages(chapterUrl: string, source: string, supabase: 
     }
   }
   
-  // Fallback to regular fetch for other sources
+  // Fallback to regular fetch for other sources or if above methods failed
   if (!html || html.length < 1000) {
     console.log(`[Pages] Using regular fetchHTML...`);
     html = await fetchHTML(chapterUrl, config);
