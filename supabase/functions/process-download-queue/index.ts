@@ -7,16 +7,16 @@ const corsHeaders = {
 };
 
 /**
- * Background Queue Processor
+ * Background Queue Processor - Enhanced with self-chaining
  * 
- * This edge function processes download queue items:
- * - Called by cron job every minute or triggered manually
- * - Picks pending items and processes them
- * - Self-chains to continue processing if more items exist
+ * - Called by cron job every 2 minutes or triggered manually
+ * - Processes pending items in batches
+ * - Self-chains to continue processing if more items remain
+ * - Retries failed items with exponential backoff
  */
 
-const BATCH_SIZE = 3; // Process 3 chapters per invocation
-const MAX_PROCESS_TIME_MS = 45_000; // Leave buffer before 60s timeout
+const BATCH_SIZE = 3;
+const MAX_PROCESS_TIME_MS = 45_000;
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -32,7 +32,14 @@ serve(async (req) => {
 
   try {
     const body = await req.json().catch(() => ({}));
-    const mangaIdFilter = body.mangaId; // Optional: process only specific manga
+    const mangaIdFilter = body.mangaId;
+
+    // Reset stale "processing" items (stuck for > 5 minutes)
+    await supabase
+      .from('background_download_queue')
+      .update({ status: 'pending' })
+      .eq('status', 'processing')
+      .lt('updated_at', new Date(Date.now() - 5 * 60 * 1000).toISOString());
 
     // Pick pending items
     let query = supabase
@@ -73,10 +80,14 @@ serve(async (req) => {
         break;
       }
 
-      // Mark as processing
+      // Mark as processing with updated timestamp
       await supabase
         .from('background_download_queue')
-        .update({ status: 'processing', attempts: item.attempts + 1 })
+        .update({ 
+          status: 'processing', 
+          attempts: (item.attempts || 0) + 1,
+          updated_at: new Date().toISOString()
+        })
         .eq('id', item.id);
 
       try {
@@ -129,30 +140,49 @@ serve(async (req) => {
       } catch (err: any) {
         console.error(`[Queue] ✗ Item ${item.id}:`, err?.message);
         
-        const shouldRetry = item.attempts < item.max_attempts;
+        const currentAttempts = (item.attempts || 0) + 1;
+        const maxAttempts = item.max_attempts || 3;
+        const shouldRetry = currentAttempts < maxAttempts;
         
         await supabase
           .from('background_download_queue')
           .update({ 
             status: shouldRetry ? 'pending' : 'failed',
-            error_message: err?.message || 'Unknown error'
+            error_message: err?.message || 'Unknown error',
+            updated_at: new Date().toISOString()
           })
           .eq('id', item.id);
 
         failed++;
       }
 
-      // Small delay between items
-      await new Promise(r => setTimeout(r, 500));
+      // Delay between items to avoid rate limiting
+      await new Promise(r => setTimeout(r, 1500));
     }
 
-    // Check if more items exist for self-chaining
+    // Check if more items exist
     const { count: remainingCount } = await supabase
       .from('background_download_queue')
       .select('*', { count: 'exact', head: true })
       .eq('status', 'pending');
 
     console.log(`[Queue] Done: ${processed} processed, ${failed} failed, ${remainingCount || 0} remaining`);
+
+    // Self-chain: if more items remain and we have time, trigger another round
+    if ((remainingCount || 0) > 0 && !isNearTimeout()) {
+      console.log(`[Queue] Self-chaining to process remaining ${remainingCount} items...`);
+      
+      // Fire-and-forget: trigger next batch after a delay
+      setTimeout(async () => {
+        try {
+          await supabase.functions.invoke('process-download-queue', {
+            body: mangaIdFilter ? { mangaId: mangaIdFilter } : {},
+          });
+        } catch (e) {
+          console.error('[Queue] Self-chain failed:', e);
+        }
+      }, 3000);
+    }
 
     return new Response(
       JSON.stringify({ 

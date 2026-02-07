@@ -29,6 +29,7 @@ import {
   MessageCircle,
   ExternalLink,
   Settings,
+  Download,
 } from "lucide-react";
 
 const MangaDetail = () => {
@@ -556,6 +557,16 @@ const MangaDetail = () => {
             </TabsList>
 
             <TabsContent value="chapters">
+              {/* Admin: Download All Button */}
+              {isAdmin && (
+                <div className="mb-6">
+                  <BackgroundQueueManager
+                    mangaId={manga.id}
+                    mangaTitle={manga.title}
+                    source={manga.source}
+                  />
+                </div>
+              )}
               <ChapterListNew
                 mangaId={manga.id}
                 mangaSlug={manga.slug}
