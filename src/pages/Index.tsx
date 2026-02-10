@@ -6,10 +6,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Navbar } from "@/components/Navbar";
 import { AnimatedHero } from "@/components/home/AnimatedHero";
-import { BentoGrid, PopularSection, TrendingSection } from "@/components/home/BentoGrid";
+import { PopularSection, TrendingSection, NewReleasesSection, RecentlyUpdatedSection } from "@/components/home/BentoGrid";
 import { QuickAccessCards } from "@/components/home/QuickAccessCards";
 import { LatestChaptersGrid } from "@/components/home/LatestChaptersGrid";
-import { StatsSection } from "@/components/home/StatsSection";
 import { Footer } from "@/components/home/Footer";
 
 const Index = () => {
@@ -18,6 +17,7 @@ const Index = () => {
   const [popularManga, setPopularManga] = useState<any[]>([]);
   const [trendingManga, setTrendingManga] = useState<any[]>([]);
   const [newReleases, setNewReleases] = useState<any[]>([]);
+  const [recentlyUpdated, setRecentlyUpdated] = useState<any[]>([]);
 
   useEffect(() => {
     checkAdminRole();
@@ -39,33 +39,38 @@ const Index = () => {
   };
 
   const fetchManga = async () => {
-    // Fetch popular manga (most viewed)
-    const { data: popular } = await supabase
-      .from('manga')
-      .select('id, slug, title, cover_url, rating, views, genres')
-      .eq('publish_status', 'published')
-      .order('views', { ascending: false })
-      .limit(20);
+    const [popular, trending, newData, updated] = await Promise.all([
+      supabase
+        .from('manga')
+        .select('id, slug, title, cover_url, rating, views, genres')
+        .eq('publish_status', 'published')
+        .order('views', { ascending: false })
+        .limit(20),
+      supabase
+        .from('manga')
+        .select('id, slug, title, cover_url, rating, views, genres')
+        .eq('publish_status', 'published')
+        .eq('is_featured', true)
+        .order('views', { ascending: false })
+        .limit(20),
+      supabase
+        .from('manga')
+        .select('id, slug, title, cover_url, rating, views, genres')
+        .eq('publish_status', 'published')
+        .order('created_at', { ascending: false })
+        .limit(20),
+      supabase
+        .from('manga')
+        .select('id, slug, title, cover_url, rating, views, genres')
+        .eq('publish_status', 'published')
+        .order('updated_at', { ascending: false })
+        .limit(20),
+    ]);
     
-    // Fetch trending manga (recently updated with high views)
-    const { data: trending } = await supabase
-      .from('manga')
-      .select('id, slug, title, cover_url, rating, views, genres')
-      .eq('publish_status', 'published')
-      .order('updated_at', { ascending: false })
-      .limit(20);
-
-    // Fetch new releases
-    const { data: newData } = await supabase
-      .from('manga')
-      .select('id, slug, title, cover_url, rating, views, genres')
-      .eq('publish_status', 'published')
-      .order('created_at', { ascending: false })
-      .limit(20);
-    
-    if (popular) setPopularManga(popular);
-    if (trending) setTrendingManga(trending);
-    if (newData) setNewReleases(newData);
+    if (popular.data) setPopularManga(popular.data);
+    if (trending.data) setTrendingManga(trending.data);
+    if (newData.data) setNewReleases(newData.data);
+    if (updated.data) setRecentlyUpdated(updated.data);
   };
 
   return (
@@ -90,7 +95,7 @@ const Index = () => {
         </motion.div>
       )}
       
-      {/* Hero Section with Animated Carousel */}
+      {/* Hero Section */}
       <AnimatedHero />
 
       {/* Quick Access Cards */}
@@ -98,32 +103,35 @@ const Index = () => {
         <QuickAccessCards />
       </div>
 
-      {/* Stats Section */}
-      <div className="container mx-auto px-4">
-        <StatsSection />
-      </div>
-
-      {/* Popular Manga - Large Grid */}
-      <div className="container mx-auto px-4">
-        <PopularSection items={popularManga} />
-      </div>
-
-      {/* Trending - Medium Grid with Background */}
-      <div className="bg-card/30">
+      {/* Popular Manga */}
+      {popularManga.length > 0 && (
         <div className="container mx-auto px-4">
-          <TrendingSection items={trendingManga} />
+          <PopularSection items={popularManga} />
         </div>
-      </div>
+      )}
+
+      {/* Trending */}
+      {trendingManga.length > 0 && (
+        <div className="bg-card/30">
+          <div className="container mx-auto px-4">
+            <TrendingSection items={trendingManga} />
+          </div>
+        </div>
+      )}
 
       {/* New Releases */}
-      <div className="container mx-auto px-4">
-        <BentoGrid
-          title="إصدارات جديدة"
-          icon={<motion.span whileHover={{ rotate: 15 }}>✨</motion.span>}
-          items={newReleases}
-          variant="medium"
-        />
-      </div>
+      {newReleases.length > 0 && (
+        <div className="container mx-auto px-4">
+          <NewReleasesSection items={newReleases} />
+        </div>
+      )}
+
+      {/* Recently Updated */}
+      {recentlyUpdated.length > 0 && (
+        <div className="container mx-auto px-4">
+          <RecentlyUpdatedSection items={recentlyUpdated} />
+        </div>
+      )}
 
       {/* Latest Chapters */}
       <div className="bg-card/20">

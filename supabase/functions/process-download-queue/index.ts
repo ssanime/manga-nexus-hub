@@ -7,16 +7,14 @@ const corsHeaders = {
 };
 
 /**
- * Background Queue Processor - Enhanced with self-chaining
+ * Background Queue Processor - Aggressive batch processing
  * 
+ * - Processes ALL pending items in a loop until timeout or done
  * - Called by cron job every 2 minutes or triggered manually
- * - Processes pending items in batches
- * - Self-chains to continue processing if more items remain
- * - Retries failed items with exponential backoff
+ * - Self-chains via direct fetch if items remain after timeout
  */
 
-const BATCH_SIZE = 3;
-const MAX_PROCESS_TIME_MS = 45_000;
+const MAX_PROCESS_TIME_MS = 50_000; // 50s to stay under 60s limit
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -28,6 +26,7 @@ serve(async (req) => {
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
   const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+  const anonKey = Deno.env.get('SUPABASE_ANON_KEY') || Deno.env.get('SUPABASE_PUBLISHABLE_KEY') || '';
   const supabase = createClient(supabaseUrl, supabaseKey);
 
   try {
@@ -41,46 +40,39 @@ serve(async (req) => {
       .eq('status', 'processing')
       .lt('updated_at', new Date(Date.now() - 5 * 60 * 1000).toISOString());
 
-    // Pick pending items
-    let query = supabase
-      .from('background_download_queue')
-      .select('*')
-      .eq('status', 'pending')
-      .order('priority', { ascending: false })
-      .order('created_at', { ascending: true })
-      .limit(BATCH_SIZE);
+    let totalProcessed = 0;
+    let totalFailed = 0;
 
-    if (mangaIdFilter) {
-      query = query.eq('manga_id', mangaIdFilter);
-    }
+    // LOOP: keep processing until timeout or no more items
+    while (!isNearTimeout()) {
+      // Pick next pending item (one at a time for reliability)
+      let query = supabase
+        .from('background_download_queue')
+        .select('*')
+        .eq('status', 'pending')
+        .order('priority', { ascending: false })
+        .order('created_at', { ascending: true })
+        .limit(1);
 
-    const { data: items, error: fetchError } = await query;
+      if (mangaIdFilter) {
+        query = query.eq('manga_id', mangaIdFilter);
+      }
 
-    if (fetchError) {
-      console.error('[Queue] Fetch error:', fetchError);
-      throw fetchError;
-    }
+      const { data: items, error: fetchError } = await query;
 
-    if (!items || items.length === 0) {
-      console.log('[Queue] No pending items');
-      return new Response(
-        JSON.stringify({ processed: 0, message: 'No pending items' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    console.log(`[Queue] Processing ${items.length} items...`);
-
-    let processed = 0;
-    let failed = 0;
-
-    for (const item of items) {
-      if (isNearTimeout()) {
-        console.log('[Queue] Near timeout, stopping...');
+      if (fetchError) {
+        console.error('[Queue] Fetch error:', fetchError);
         break;
       }
 
-      // Mark as processing with updated timestamp
+      if (!items || items.length === 0) {
+        console.log(`[Queue] No more pending items. Total processed: ${totalProcessed}`);
+        break;
+      }
+
+      const item = items[0];
+
+      // Mark as processing
       await supabase
         .from('background_download_queue')
         .update({ 
@@ -98,17 +90,17 @@ serve(async (req) => {
           .eq('chapter_id', item.chapter_id);
 
         if (count && count > 0) {
-          console.log(`[Queue] Chapter ${item.chapter_id} already has ${count} pages, marking complete`);
+          console.log(`[Queue] Chapter ${item.chapter_id} already has ${count} pages, skipping`);
           await supabase
             .from('background_download_queue')
             .update({ status: 'completed', completed_at: new Date().toISOString() })
             .eq('id', item.id);
-          processed++;
+          totalProcessed++;
           continue;
         }
 
         // Call scrape function to download pages
-        console.log(`[Queue] Downloading pages for chapter ${item.chapter_id}...`);
+        console.log(`[Queue] Downloading chapter ${item.chapter_id} from ${item.source_url}...`);
         
         const { data: result, error: scrapeError } = await supabase.functions.invoke('scrape-lekmanga', {
           body: {
@@ -135,7 +127,7 @@ serve(async (req) => {
           })
           .eq('id', item.id);
 
-        processed++;
+        totalProcessed++;
 
       } catch (err: any) {
         console.error(`[Queue] ✗ Item ${item.id}:`, err?.message);
@@ -153,43 +145,47 @@ serve(async (req) => {
           })
           .eq('id', item.id);
 
-        failed++;
+        totalFailed++;
       }
 
-      // Delay between items to avoid rate limiting
-      await new Promise(r => setTimeout(r, 1500));
+      // Small delay between items to avoid rate limiting
+      await new Promise(r => setTimeout(r, 1000));
     }
 
-    // Check if more items exist
+    // Check if more items remain
     const { count: remainingCount } = await supabase
       .from('background_download_queue')
       .select('*', { count: 'exact', head: true })
       .eq('status', 'pending');
 
-    console.log(`[Queue] Done: ${processed} processed, ${failed} failed, ${remainingCount || 0} remaining`);
+    console.log(`[Queue] Done: ${totalProcessed} processed, ${totalFailed} failed, ${remainingCount || 0} remaining`);
 
-    // Self-chain: if more items remain and we have time, trigger another round
-    if ((remainingCount || 0) > 0 && !isNearTimeout()) {
-      console.log(`[Queue] Self-chaining to process remaining ${remainingCount} items...`);
+    // Self-chain: if more items remain, trigger another run immediately
+    if ((remainingCount || 0) > 0) {
+      console.log(`[Queue] Self-chaining for ${remainingCount} remaining items...`);
       
-      // Fire-and-forget: trigger next batch after a delay
-      setTimeout(async () => {
-        try {
-          await supabase.functions.invoke('process-download-queue', {
-            body: mangaIdFilter ? { mangaId: mangaIdFilter } : {},
-          });
-        } catch (e) {
-          console.error('[Queue] Self-chain failed:', e);
-        }
-      }, 3000);
+      try {
+        // Use direct fetch for reliable self-chaining (not setTimeout)
+        const chainBody = mangaIdFilter ? JSON.stringify({ mangaId: mangaIdFilter }) : '{}';
+        fetch(`${supabaseUrl}/functions/v1/process-download-queue`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${anonKey}`,
+          },
+          body: chainBody,
+        }).catch(e => console.error('[Queue] Chain fetch failed:', e));
+      } catch (e) {
+        console.error('[Queue] Self-chain failed:', e);
+      }
     }
 
     return new Response(
       JSON.stringify({ 
-        processed, 
-        failed,
+        processed: totalProcessed, 
+        failed: totalFailed,
         remaining: remainingCount || 0,
-        message: `Processed ${processed} items`
+        message: `Processed ${totalProcessed} items`
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
