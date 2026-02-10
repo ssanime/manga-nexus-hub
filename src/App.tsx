@@ -17,6 +17,7 @@ import CreateTeam from "./pages/CreateTeam";
 import TeamDetail from "./pages/TeamDetail";
 import TeamDashboard from "./pages/TeamDashboard";
 import NotFound from "./pages/NotFound";
+import Recent from "./pages/Recent";
 
 const queryClient = new QueryClient();
 
@@ -40,6 +41,7 @@ const App = () => (
           <Route path="/teams/create" element={<CreateTeam />} />
           <Route path="/teams/:slug" element={<TeamDetail />} />
           <Route path="/teams/:slug/dashboard" element={<TeamDashboard />} />
+          <Route path="/recent" element={<Recent />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
