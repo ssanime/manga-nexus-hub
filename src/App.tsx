@@ -18,6 +18,9 @@ import TeamDetail from "./pages/TeamDetail";
 import TeamDashboard from "./pages/TeamDashboard";
 import NotFound from "./pages/NotFound";
 import Recent from "./pages/Recent";
+import Contact from "./pages/Contact";
+import FAQ from "./pages/FAQ";
+import Privacy from "./pages/Privacy";
 
 const queryClient = new QueryClient();
 
@@ -42,6 +45,9 @@ const App = () => (
           <Route path="/teams/:slug" element={<TeamDetail />} />
           <Route path="/teams/:slug/dashboard" element={<TeamDashboard />} />
           <Route path="/recent" element={<Recent />} />
+          <Route path="/contact" element={<Contact />} />
+          <Route path="/faq" element={<FAQ />} />
+          <Route path="/privacy" element={<Privacy />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
