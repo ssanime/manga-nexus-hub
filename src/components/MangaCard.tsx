@@ -12,6 +12,7 @@ interface MangaCardProps {
   latestChapter?: string;
   genres?: string[];
   isNew?: boolean;
+  detailPath?: string;
 }
 
 export const MangaCard = ({
