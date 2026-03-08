@@ -1,6 +1,6 @@
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
-import { BookOpen, Palette, Crown, Zap } from "lucide-react";
+import { BookOpen, Palette, Crown, Zap, BookText } from "lucide-react";
 
 const categories = [
   {
