@@ -38,6 +38,9 @@ const App = () => (
           <Route path="/manga" element={<Manga />} />
           <Route path="/manhwa" element={<Manhwa />} />
           <Route path="/manhua" element={<Manhua />} />
+          <Route path="/novels" element={<Novels />} />
+          <Route path="/novel/:id" element={<NovelDetail />} />
+          <Route path="/read-novel/:mangaId/:chapterId" element={<NovelReader />} />
           <Route path="/manga/:id" element={<MangaDetail />} />
           <Route path="/read/:mangaId/:chapterId" element={<Reader />} />
           <Route path="/auth" element={<Auth />} />
