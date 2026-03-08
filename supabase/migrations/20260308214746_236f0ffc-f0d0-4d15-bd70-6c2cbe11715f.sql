@@ -1,0 +1,1 @@
+ALTER TABLE public.manga ADD COLUMN IF NOT EXISTS type text DEFAULT 'manga';
