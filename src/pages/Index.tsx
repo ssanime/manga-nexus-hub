@@ -6,72 +6,32 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Navbar } from "@/components/Navbar";
 import { AnimatedHero } from "@/components/home/AnimatedHero";
-import { PopularSection, TrendingSection, NewReleasesSection, RecentlyUpdatedSection } from "@/components/home/BentoGrid";
-import { QuickAccessCards } from "@/components/home/QuickAccessCards";
+import { GenreExplorer } from "@/components/home/GenreExplorer";
+import { EditorsPick } from "@/components/home/EditorsPick";
+import { MangaShowcase } from "@/components/home/MangaShowcase";
+import { CinematicBanner } from "@/components/home/CinematicBanner";
 import { LatestChaptersGrid } from "@/components/home/LatestChaptersGrid";
 import { Footer } from "@/components/home/Footer";
 
 const Index = () => {
   const navigate = useNavigate();
   const [isAdmin, setIsAdmin] = useState(false);
-  const [popularManga, setPopularManga] = useState<any[]>([]);
-  const [trendingManga, setTrendingManga] = useState<any[]>([]);
-  const [newReleases, setNewReleases] = useState<any[]>([]);
-  const [recentlyUpdated, setRecentlyUpdated] = useState<any[]>([]);
 
   useEffect(() => {
-    checkAdminRole();
-    fetchManga();
-  }, []);
-
-  const checkAdminRole = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
-      const { data: roles } = await supabase
-        .from('user_roles')
-        .select('role')
-        .eq('user_id', user.id);
-      
-      if (roles && roles.some(r => r.role === 'admin')) {
-        setIsAdmin(true);
+    const checkAdminRole = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: roles } = await supabase
+          .from('user_roles')
+          .select('role')
+          .eq('user_id', user.id);
+        if (roles && roles.some(r => r.role === 'admin')) {
+          setIsAdmin(true);
+        }
       }
-    }
-  };
-
-  const fetchManga = async () => {
-    const [popular, trending, newData, updated] = await Promise.all([
-      supabase
-        .from('manga')
-        .select('id, slug, title, cover_url, rating, views, genres')
-        .eq('publish_status', 'published')
-        .order('views', { ascending: false })
-        .limit(20),
-      supabase
-        .from('manga')
-        .select('id, slug, title, cover_url, rating, views, genres')
-        .eq('publish_status', 'published')
-        .eq('is_featured', true)
-        .order('views', { ascending: false })
-        .limit(20),
-      supabase
-        .from('manga')
-        .select('id, slug, title, cover_url, rating, views, genres')
-        .eq('publish_status', 'published')
-        .order('created_at', { ascending: false })
-        .limit(20),
-      supabase
-        .from('manga')
-        .select('id, slug, title, cover_url, rating, views, genres')
-        .eq('publish_status', 'published')
-        .order('updated_at', { ascending: false })
-        .limit(20),
-    ]);
-    
-    if (popular.data) setPopularManga(popular.data);
-    if (trending.data) setTrendingManga(trending.data);
-    if (newData.data) setNewReleases(newData.data);
-    if (updated.data) setRecentlyUpdated(updated.data);
-  };
+    };
+    checkAdminRole();
+  }, []);
 
   return (
     <div className="min-h-screen bg-background">
@@ -95,45 +55,40 @@ const Index = () => {
         </motion.div>
       )}
       
-      {/* Hero Section */}
+      {/* 1. Hero - Cinematic featured slider */}
       <AnimatedHero />
 
-      {/* Quick Access Cards */}
+      {/* 2. Category Banners - Manga/Manhwa/Manhua with cover collages */}
       <div className="container mx-auto px-4">
-        <QuickAccessCards />
+        <CinematicBanner />
       </div>
 
-      {/* Popular Manga */}
-      {popularManga.length > 0 && (
+      {/* 3. Popular Showcase - Horizontal 3D scroll */}
+      <div className="container mx-auto px-4">
+        <MangaShowcase title="الأكثر مشاهدة" query="popular" />
+      </div>
+
+      {/* 4. Editor's Pick - Cinematic single spotlight */}
+      <EditorsPick />
+
+      {/* 5. Genre Explorer - Visual category tiles */}
+      <div className="container mx-auto px-4">
+        <GenreExplorer />
+      </div>
+
+      {/* 6. New Releases - Horizontal scroll */}
+      <div className="bg-card/20">
         <div className="container mx-auto px-4">
-          <PopularSection items={popularManga} />
+          <MangaShowcase title="إصدارات جديدة" query="new" />
         </div>
-      )}
+      </div>
 
-      {/* Trending */}
-      {trendingManga.length > 0 && (
-        <div className="bg-card/30">
-          <div className="container mx-auto px-4">
-            <TrendingSection items={trendingManga} />
-          </div>
-        </div>
-      )}
+      {/* 7. Recently Updated - Horizontal scroll */}
+      <div className="container mx-auto px-4">
+        <MangaShowcase title="آخر التحديثات" query="updated" />
+      </div>
 
-      {/* New Releases */}
-      {newReleases.length > 0 && (
-        <div className="container mx-auto px-4">
-          <NewReleasesSection items={newReleases} />
-        </div>
-      )}
-
-      {/* Recently Updated */}
-      {recentlyUpdated.length > 0 && (
-        <div className="container mx-auto px-4">
-          <RecentlyUpdatedSection items={recentlyUpdated} />
-        </div>
-      )}
-
-      {/* Latest Chapters */}
+      {/* 8. Latest Chapters Grid */}
       <div className="bg-card/20">
         <div className="container mx-auto px-4">
           <LatestChaptersGrid />
