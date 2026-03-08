@@ -216,6 +216,7 @@ export type Database = {
           team_id: string | null
           title: string
           trailer_url: string | null
+          type: string | null
           updated_at: string
           views: number | null
           year: number | null
@@ -254,6 +255,7 @@ export type Database = {
           team_id?: string | null
           title: string
           trailer_url?: string | null
+          type?: string | null
           updated_at?: string
           views?: number | null
           year?: number | null
@@ -292,6 +294,7 @@ export type Database = {
           team_id?: string | null
           title?: string
           trailer_url?: string | null
+          type?: string | null
           updated_at?: string
           views?: number | null
           year?: number | null

@@ -12,6 +12,9 @@ import Profile from "./pages/Profile";
 import Manga from "./pages/Manga";
 import Manhwa from "./pages/Manhwa";
 import Manhua from "./pages/Manhua";
+import Novels from "./pages/Novels";
+import NovelDetail from "./pages/NovelDetail";
+import NovelReader from "./pages/NovelReader";
 import Teams from "./pages/Teams";
 import CreateTeam from "./pages/CreateTeam";
 import TeamDetail from "./pages/TeamDetail";
@@ -35,6 +38,9 @@ const App = () => (
           <Route path="/manga" element={<Manga />} />
           <Route path="/manhwa" element={<Manhwa />} />
           <Route path="/manhua" element={<Manhua />} />
+          <Route path="/novels" element={<Novels />} />
+          <Route path="/novel/:id" element={<NovelDetail />} />
+          <Route path="/read-novel/:mangaId/:chapterId" element={<NovelReader />} />
           <Route path="/manga/:id" element={<MangaDetail />} />
           <Route path="/read/:mangaId/:chapterId" element={<Reader />} />
           <Route path="/auth" element={<Auth />} />

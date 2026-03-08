@@ -12,6 +12,7 @@ interface MangaCardProps {
   latestChapter?: string;
   genres?: string[];
   isNew?: boolean;
+  detailPath?: string;
 }
 
 export const MangaCard = ({
@@ -23,9 +24,10 @@ export const MangaCard = ({
   latestChapter,
   genres = [],
   isNew = false,
+  detailPath,
 }: MangaCardProps) => {
   return (
-    <Link to={`/manga/${slug}`}>
+    <Link to={detailPath || `/manga/${slug}`}>
       <Card className="group relative overflow-hidden border-border bg-card transition-all duration-300 hover:shadow-manga-card-hover hover:scale-[1.02]">
         {/* Cover Image */}
         <div className="relative aspect-[3/4] overflow-hidden bg-secondary">

@@ -57,6 +57,9 @@ export const Navbar = () => {
             <Link to="/manhua" className="text-sm font-medium hover:text-primary transition-colors">
               مانها
             </Link>
+            <Link to="/novels" className="text-sm font-medium hover:text-primary transition-colors">
+              روايات
+            </Link>
             <Link to="/teams" className="text-sm font-medium hover:text-primary transition-colors">
               الفرق
             </Link>

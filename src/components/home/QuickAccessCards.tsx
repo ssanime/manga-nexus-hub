@@ -1,6 +1,6 @@
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
-import { BookOpen, Palette, Crown, Zap } from "lucide-react";
+import { BookOpen, Palette, Crown, Zap, BookText } from "lucide-react";
 
 const categories = [
   {
@@ -26,6 +26,14 @@ const categories = [
     href: "/manhua",
     gradient: "from-amber-500 to-orange-600",
     bgGlow: "bg-amber-500/20",
+  },
+  {
+    title: "روايات",
+    description: "روايات ويب مترجمة",
+    icon: BookText,
+    href: "/novels",
+    gradient: "from-emerald-500 to-teal-600",
+    bgGlow: "bg-emerald-500/20",
   },
   {
     title: "فرق الترجمة",
@@ -78,7 +86,7 @@ export const QuickAccessCards = () => {
         </span>
       </motion.h2>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 md:gap-6">
         {categories.map((category) => {
           const Icon = category.icon;
           return (
