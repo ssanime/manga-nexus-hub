@@ -28,6 +28,14 @@ const categories = [
     bgGlow: "bg-amber-500/20",
   },
   {
+    title: "روايات",
+    description: "روايات ويب مترجمة",
+    icon: BookText,
+    href: "/novels",
+    gradient: "from-emerald-500 to-teal-600",
+    bgGlow: "bg-emerald-500/20",
+  },
+  {
     title: "فرق الترجمة",
     description: "انضم لفريقك المفضل",
     icon: Zap,
