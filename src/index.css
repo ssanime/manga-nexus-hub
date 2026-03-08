@@ -119,3 +119,20 @@ All colors MUST be HSL.
     @apply bg-background text-foreground;
   }
 }
+
+/* Scrollbar hide utility */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* Perspective utility */
+.perspective-\[1200px\] {
+  perspective: 1200px;
+}
+.perspective-1000 {
+  perspective: 1000px;
+}
